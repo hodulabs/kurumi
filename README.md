@@ -1,6 +1,6 @@
 # kurumi
 
-The tensor engine behind [hodu](https://github.com/hodu-labs/hodu-rs): a small closed-primitive IR with a reference interpreter, reverse-mode autograd, a view-fused CPU path, an Apple Silicon (Metal) backend, and a C ABI. Written in Rust.
+The tensor engine behind [hodu](https://github.com/hodu-labs): a small closed-primitive IR with a reference interpreter, reverse-mode autograd, a view-fused CPU path, an Apple Silicon (Metal) backend, and a C ABI. Written in Rust.
 
 The design bet: keep the IR to a small fixed set of primitives, make a plain CPU interpreter the oracle, and check every backend and optimization against it -- so correctness lives in one reference and everything else is free to chase performance.
 
@@ -18,9 +18,9 @@ The design bet: keep the IR to a small fixed set of primitives, make a plain CPU
 
 | crate | role |
 |---|---|
+| [`kurumi`](kurumi) | Rust facade + C ABI |
 | [`kurumi_core`](kurumi_core) | the engine: IR, reference interpreter, autograd, view-fused CPU evaluator |
 | [`kurumi_metal`](kurumi_metal) | Apple Silicon backend (Metal), macOS only |
-| [`kurumi`](kurumi) | Rust facade + C ABI |
 
 ## Quick start
 
@@ -48,6 +48,10 @@ Requirements: a recent stable Rust (edition 2024). The Metal backend needs macOS
 ## Status
 
 Early development. Working today: the closed-primitive IR, the reference interpreter, reverse-mode autograd, the view-fused CPU path, the Apple Silicon (Metal) backend, and the C ABI.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
