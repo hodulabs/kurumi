@@ -1,0 +1,19 @@
+[package]
+name = "kurumi"
+description = "ML engine: IR, compiler, runtime, kernel stack, artifact format, C ABI."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+kurumi_core = { path = "../kurumi_core", version = "0.2.0" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+kurumi_metal = { path = "../kurumi_metal", version = "0.2.0" }

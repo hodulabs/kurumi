@@ -1,0 +1,32 @@
+[package]
+name = "kurumi_metal"
+description = "kurumi Metal backend: objc2-metal device/buffers/command batching + MSL kernels."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+half = "2.7.1"
+kurumi_core = { path = "../kurumi_core", version = "0.2.0" }
+num-complex = "0.4.6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3.2", features = ["NSString"] }
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-metal]
+version = "0.3.2"
+features = [
+    "MTLDevice", "MTLLibrary", "MTLCommandQueue", "MTLCommandBuffer",
+    "MTLCommandEncoder", "MTLComputeCommandEncoder", "MTLComputePipeline",
+    "MTLBuffer", "MTLResource", "MTLAllocation",
+]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-metal-performance-shaders]
+version = "0.3.2"
+default-features = false
+features = ["std", "MPSCore", "MPSCoreTypes", "MPSKernel", "MPSMatrix", "MPSMatrixMultiplication"]
