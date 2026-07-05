@@ -1,5 +1,9 @@
 # kurumi
 
+<p align="center">
+  <img src="assets/kurumi_mascot_with_ferris_transparent.png" alt="kurumi mascot with Ferris" width="320">
+</p>
+
 The tensor engine behind [hodu](https://github.com/hodu-labs): a small closed-primitive IR with a reference interpreter, reverse-mode autograd, a view-fused CPU path, an Apple Silicon (Metal) backend, and a C ABI. Written in Rust.
 
 The design bet: keep the IR to a small fixed set of primitives, make a plain CPU interpreter the oracle, and check every backend and optimization against it -- so correctness lives in one reference and everything else is free to chase performance.
