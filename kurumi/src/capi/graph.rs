@@ -1,7 +1,11 @@
 //! C ABI: graph lifecycle & node builders (input / constant / scalar).
 
-use crate::capi::{KU_ERR, KuGraph, build, catch, dtype_from_u32, raw_slice, set_err, usize_slice};
-use kurumi_core::{Graph, NodeId, Storage, amp, dump, node_count, simplify};
+use crate::capi::{KU_ERR, KuGraph, KuRunnable, build, catch, dtype_from_u32, raw_slice, set_err, usize_slice};
+use kurumi_core::{
+    Graph, InputBinding, InputRole, NodeId, Storage, amp, deserialize_graph, dump, node_count, serialize_graph,
+    simplify,
+};
+use std::ffi::{CStr, c_char};
 
 /// A baked constant of `dtype` from `nbytes` of little-endian element data,
 /// row-major over `shape`. Covers every dtype (ku_constant_f32 is the f32 shortcut).
@@ -148,4 +152,161 @@ pub unsafe extern "C" fn ku_node_dtype(g: *const KuGraph, node: u32) -> u32 {
     }
     let gr = &(*g).0;
     catch(KU_ERR, || gr.dtype(NodeId(node)) as u32)
+}
+
+// runnable-graph serialization (the .hodu graph section)
+
+/// Serialize the graph plus its output nodes and input bindings into a self-contained blob.
+/// `outputs` (n_out node ids) are the roots to eval; `in_nodes`/`in_roles`/`in_names` (n_in
+/// each) bind each Input node to a name and a role (0 = weight bound by name, 1 = runtime
+/// feed); `in_names` is an array of NUL-terminated UTF-8 strings. Size-then-write: pass
+/// cap=0 with out=NULL to get the length, then a buffer of that size. Returns the full length.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_graph_serialize(
+    g: *const KuGraph,
+    outputs: *const u32,
+    n_out: usize,
+    in_nodes: *const u32,
+    in_roles: *const u8,
+    in_names: *const *const c_char,
+    n_in: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if g.is_null() {
+        set_err("ku_graph_serialize: null graph".into());
+        return 0;
+    }
+    let gr = &(*g).0;
+    let out_ids: Vec<NodeId> = raw_slice(outputs, n_out).iter().map(|&i| NodeId(i)).collect();
+    let nodes = raw_slice(in_nodes, n_in);
+    let roles = raw_slice(in_roles, n_in);
+    let names = raw_slice(in_names, n_in);
+    let mut inputs = Vec::with_capacity(n_in);
+    for i in 0..n_in {
+        let role = if roles.get(i).copied() == Some(0) { InputRole::Weight } else { InputRole::Runtime };
+        let name = match names.get(i) {
+            Some(&p) if !p.is_null() => CStr::from_ptr(p).to_string_lossy().into_owned(),
+            _ => String::new(),
+        };
+        let node = NodeId(nodes.get(i).copied().unwrap_or(KU_ERR));
+        inputs.push(InputBinding { node, role, name });
+    }
+    let blob = serialize_graph(gr, &out_ids, &inputs);
+    let n = blob.len().min(cap);
+    if n > 0 && !out.is_null() {
+        std::ptr::copy_nonoverlapping(blob.as_ptr(), out, n);
+    }
+    blob.len()
+}
+
+/// Deserialize a blob from [`ku_graph_serialize`] into a runnable handle (rebuilt graph +
+/// output nodes + input bindings). Returns NULL on a malformed blob (see `ku_last_error`).
+/// Free with `ku_runnable_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_graph_deserialize(bytes: *const u8, len: usize) -> *mut KuRunnable {
+    match deserialize_graph(raw_slice(bytes, len)) {
+        Ok(r) => Box::into_raw(Box::new(KuRunnable(r))),
+        Err(e) => {
+            set_err(format!("ku_graph_deserialize: {e:?}"));
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Move the rebuilt graph out of the runnable into its own handle (call once). The runnable
+/// keeps its output/input metadata; free the graph with `ku_graph_free` and the runnable
+/// with `ku_runnable_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_take_graph(h: *mut KuRunnable) -> *mut KuGraph {
+    if h.is_null() {
+        set_err("ku_runnable_take_graph: null handle".into());
+        return std::ptr::null_mut();
+    }
+    let g = std::mem::replace(&mut (*h).0.graph, Graph::new());
+    Box::into_raw(Box::new(KuGraph(g)))
+}
+
+/// Number of output nodes in the runnable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_output_count(h: *const KuRunnable) -> usize {
+    if h.is_null() {
+        return 0;
+    }
+    let r = &(*h).0;
+    r.outputs.len()
+}
+
+/// The i-th output NodeId; KU_ERR if the handle is null or `i` is out of range.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_output(h: *const KuRunnable, i: usize) -> u32 {
+    if h.is_null() {
+        return KU_ERR;
+    }
+    let r = &(*h).0;
+    r.outputs.get(i).map_or(KU_ERR, |n| n.0)
+}
+
+/// Number of input bindings in the runnable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_input_count(h: *const KuRunnable) -> usize {
+    if h.is_null() {
+        return 0;
+    }
+    let r = &(*h).0;
+    r.inputs.len()
+}
+
+/// The i-th input's NodeId; KU_ERR if the handle is null or `i` is out of range.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_input_node(h: *const KuRunnable, i: usize) -> u32 {
+    if h.is_null() {
+        return KU_ERR;
+    }
+    let r = &(*h).0;
+    r.inputs.get(i).map_or(KU_ERR, |b| b.node.0)
+}
+
+/// The i-th input's role: 0 = weight (bound by name), 1 = runtime feed. KU_ERR if the
+/// handle is null or `i` is out of range.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_input_role(h: *const KuRunnable, i: usize) -> u32 {
+    if h.is_null() {
+        return KU_ERR;
+    }
+    let r = &(*h).0;
+    match r.inputs.get(i) {
+        Some(b) => match b.role {
+            InputRole::Weight => 0,
+            InputRole::Runtime => 1,
+        },
+        None => KU_ERR,
+    }
+}
+
+/// Write up to `cap` bytes of the i-th input's name (UTF-8, no trailing NUL) into `out`;
+/// returns the full length. Size-then-write: pass cap=0 first. 0 on a null handle/bad index.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_input_name(h: *const KuRunnable, i: usize, out: *mut u8, cap: usize) -> usize {
+    if h.is_null() {
+        return 0;
+    }
+    let r = &(*h).0;
+    let Some(b) = r.inputs.get(i) else {
+        return 0;
+    };
+    let name = b.name.as_bytes();
+    let n = name.len().min(cap);
+    if n > 0 && !out.is_null() {
+        std::ptr::copy_nonoverlapping(name.as_ptr(), out, n);
+    }
+    name.len()
+}
+
+/// Free a runnable handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_runnable_free(h: *mut KuRunnable) {
+    if !h.is_null() {
+        drop(Box::from_raw(h));
+    }
 }

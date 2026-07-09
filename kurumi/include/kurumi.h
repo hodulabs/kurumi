@@ -42,6 +42,7 @@ typedef struct KuTensor KuTensor;
 typedef struct KuFeeds KuFeeds;
 typedef struct KuBackend KuBackend;
 typedef struct KuPlan KuPlan;
+typedef struct KuRunnable KuRunnable;
 
 typedef uint32_t KuNode;
 
@@ -416,6 +417,26 @@ size_t ku_dump(const KuGraph *g, KuNode root, uint8_t *out, size_t cap);
 size_t ku_node_rank(const KuGraph *g, KuNode node);
 void ku_node_shape(const KuGraph *g, KuNode node, size_t *out);
 uint32_t ku_node_dtype(const KuGraph *g, KuNode node);
+
+/* runnable-graph serialization (the `.hodu` graph section): serialize the graph, its output
+ * nodes, and input bindings into a self-contained blob, then rebuild it elsewhere. Inputs
+ * bind by (node, role, name): role 0 = weight (bound by name from the weight table), 1 =
+ * runtime feed. in_names is an array of NUL-terminated UTF-8 strings. Size-then-write:
+ * cap=0 with out=NULL returns the length. */
+size_t ku_graph_serialize(const KuGraph *g, const KuNode *outputs, size_t n_out, const KuNode *in_nodes,
+                          const uint8_t *in_roles, const char *const *in_names, size_t n_in, uint8_t *out, size_t cap);
+/* Rebuild a blob into a runnable handle (NULL on a malformed blob); free with ku_runnable_free. */
+KuRunnable *ku_graph_deserialize(const uint8_t *bytes, size_t len);
+/* Move the rebuilt graph out of the runnable (call once); free it with ku_graph_free. */
+KuGraph *ku_runnable_take_graph(KuRunnable *h);
+size_t ku_runnable_output_count(const KuRunnable *h);
+KuNode ku_runnable_output(const KuRunnable *h, size_t i);
+size_t ku_runnable_input_count(const KuRunnable *h);
+KuNode ku_runnable_input_node(const KuRunnable *h, size_t i);
+uint32_t ku_runnable_input_role(const KuRunnable *h, size_t i);
+/* Write up to cap bytes of the i-th input name (UTF-8, no NUL); returns the full length. */
+size_t ku_runnable_input_name(const KuRunnable *h, size_t i, uint8_t *out, size_t cap);
+void ku_runnable_free(KuRunnable *h);
 
 /* plan-replay: compile once, run per feeds (consts never re-copied) */
 KuPlan *ku_plan_compile(const KuGraph *g, KuNode node); /* NULL if off the f32 fused path */

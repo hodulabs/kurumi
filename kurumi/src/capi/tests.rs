@@ -436,3 +436,76 @@ fn capi_pad_mode_matches_builder() {
         ku_graph_free(g);
     }
 }
+
+// Graph serialization over the C ABI: build -> ku_graph_serialize (size-then-write) ->
+// ku_graph_deserialize -> query metadata -> take the rebuilt graph and eval it. The
+// replayed graph must compute the same value the original does, through the same feed.
+#[test]
+fn capi_graph_serialize_round_trips() {
+    unsafe {
+        let g = ku_graph_new();
+        let cpu = ku_backend_new(0);
+
+        // y = sum(x * w, axis=0); x is a runtime input, w a baked constant.
+        let x = ku_input(g, [3usize].as_ptr(), 1, KU_F32);
+        let w = ku_constant_f32(g, [2., 3., 4.].as_ptr(), 3, [3usize].as_ptr(), 1);
+        let y = ku_sum(g, ku_mul(g, x, w), 0);
+
+        // one output (y), one runtime input (x) named "x".
+        let outputs = [y];
+        let in_nodes = [x];
+        let in_roles = [1u8]; // runtime
+        let name = std::ffi::CString::new("x").unwrap();
+        let in_names = [name.as_ptr()];
+        let ser = |out: *mut u8, cap: usize| {
+            ku_graph_serialize(
+                g,
+                outputs.as_ptr(),
+                1,
+                in_nodes.as_ptr(),
+                in_roles.as_ptr(),
+                in_names.as_ptr(),
+                1,
+                out,
+                cap,
+            )
+        };
+        let len = ser(ptr::null_mut(), 0);
+        assert!(len > 0);
+        let mut blob = vec![0u8; len];
+        assert_eq!(ser(blob.as_mut_ptr(), len), len);
+
+        // deserialize and check the output/input metadata round-trips.
+        let rh = ku_graph_deserialize(blob.as_ptr(), blob.len());
+        assert!(!rh.is_null());
+        assert_eq!(ku_runnable_output_count(rh), 1);
+        assert_eq!(ku_runnable_output(rh, 0), y);
+        assert_eq!(ku_runnable_input_count(rh), 1);
+        assert_eq!(ku_runnable_input_node(rh, 0), x);
+        assert_eq!(ku_runnable_input_role(rh, 0), 1);
+        let mut nm = vec![0u8; ku_runnable_input_name(rh, 0, ptr::null_mut(), 0)];
+        ku_runnable_input_name(rh, 0, nm.as_mut_ptr(), nm.len());
+        assert_eq!(&nm, b"x");
+
+        // take the rebuilt graph (ids preserved) and eval: 1*2 + 2*3 + 3*4 = 20.
+        let g2 = ku_runnable_take_graph(rh);
+        assert!(!g2.is_null());
+        let feeds = ku_feeds_new();
+        let ftv = ku_tensor_f32([1., 2., 3.].as_ptr(), 3, [3usize].as_ptr(), 1);
+        ku_feeds_set(feeds, x, ftv);
+        let yt = ku_eval_with(g2, y, cpu, feeds);
+        assert_eq!(read_f32(yt), vec![20.]);
+        ku_tensor_free(yt);
+        ku_tensor_free(ftv);
+        ku_feeds_free(feeds);
+
+        // malformed blob -> null + message, not a panic.
+        assert!(ku_graph_deserialize(b"nope".as_ptr(), 4).is_null());
+        assert!(!ku_last_error().is_null());
+
+        ku_runnable_free(rh);
+        ku_graph_free(g2);
+        ku_backend_free(cpu);
+        ku_graph_free(g);
+    }
+}

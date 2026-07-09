@@ -7,10 +7,12 @@ mod inspect;
 mod op;
 mod ops;
 mod pass;
+mod serialize;
 
 pub use inspect::{dump, node_count, reachable};
 pub use op::{ArgKind, Node, NodeId, Op, ScatterOp};
 pub use pass::{amp, simplify};
+pub use serialize::{InputBinding, InputRole, Runnable, deserialize_graph, serialize_graph};
 
 use crate::{DType, Error, Storage};
 use std::sync::atomic::{AtomicU64, Ordering};

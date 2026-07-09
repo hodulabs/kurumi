@@ -22,7 +22,10 @@ pub(crate) use dtype::{Bitwise, Elem, Float, Int, Num, Signed, bitcast, cast, io
 pub use dtype::{DType, Storage, TensorVal};
 pub use error::Error;
 pub use grad::grad;
-pub use graph::{ArgKind, Graph, Node, NodeId, Op, ScatterOp, amp, dump, node_count, reachable, simplify};
+pub use graph::{
+    ArgKind, Graph, InputBinding, InputRole, Node, NodeId, Op, Runnable, ScatterOp, amp, deserialize_graph, dump,
+    node_count, reachable, serialize_graph, simplify,
+};
 pub use interp::{Feeds, eval_op, interpret, interpret_many, interpret_with};
 pub(crate) use interp::{dot_dispatch, dot_general, reduce_v};
 pub use layout::row_major_strides;
