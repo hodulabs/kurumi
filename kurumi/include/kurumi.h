@@ -425,6 +425,11 @@ uint32_t ku_node_dtype(const KuGraph *g, KuNode node);
  * cap=0 with out=NULL returns the length. */
 size_t ku_graph_serialize(const KuGraph *g, const KuNode *outputs, size_t n_out, const KuNode *in_nodes,
                           const uint8_t *in_roles, const char *const *in_names, size_t n_in, uint8_t *out, size_t cap);
+/* Same, but writes only the nodes reachable from outputs (remapped dense) -- drops backward/
+ * dead arena nodes so a training graph exports a clean inference program. */
+size_t ku_graph_serialize_reachable(const KuGraph *g, const KuNode *outputs, size_t n_out, const KuNode *in_nodes,
+                                    const uint8_t *in_roles, const char *const *in_names, size_t n_in, uint8_t *out,
+                                    size_t cap);
 /* Rebuild a blob into a runnable handle (NULL on a malformed blob); free with ku_runnable_free. */
 KuRunnable *ku_graph_deserialize(const uint8_t *bytes, size_t len);
 /* Move the rebuilt graph out of the runnable (call once); free it with ku_graph_free. */

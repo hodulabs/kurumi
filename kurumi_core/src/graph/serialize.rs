@@ -7,6 +7,7 @@
 
 use super::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Error, Storage};
+use std::collections::{HashMap, HashSet};
 
 const MAGIC: &[u8] = b"KGPH";
 const VERSION: u8 = 1;
@@ -34,32 +35,86 @@ pub struct Runnable {
 }
 
 /// Serialize a graph and its output/input bindings into a self-contained blob. The whole
-/// node arena is written in id order (id-preserving; dead-node pruning is a caller concern).
+/// node arena is written in id order (id-preserving). See [`serialize_reachable`] to write
+/// only the live cone.
 pub fn serialize_graph(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding]) -> Vec<u8> {
+    let nodes: Vec<(&Op, Vec<u32>)> = g.nodes.iter().map(|n| (&n.op, n.src.iter().map(|s| s.0).collect())).collect();
+    let outs: Vec<u32> = outputs.iter().map(|o| o.0).collect();
+    let ins: Vec<(u32, InputRole, &str)> = inputs.iter().map(|b| (b.node.0, b.role, b.name.as_str())).collect();
+    write_blob(&nodes, &outs, &ins)
+}
+
+/// Serialize only the nodes reachable from `outputs`, remapped to a dense id range. Arena
+/// nodes no output depends on -- backward nodes from a training `grad()`, dead builder
+/// scratch -- are dropped, so a live graph exports a clean inference program. Input bindings
+/// whose node is unreachable are omitted. The blob reads back via [`deserialize_graph`] just
+/// like a whole-arena one (it is already dense and topologically ordered).
+pub fn serialize_reachable(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding]) -> Vec<u8> {
+    let order = reachable_multi(g, outputs);
+    let remap: HashMap<NodeId, u32> = order.iter().enumerate().map(|(i, &id)| (id, i as u32)).collect();
+    let nodes: Vec<(&Op, Vec<u32>)> = order
+        .iter()
+        .map(|&id| {
+            let n = g.node(id);
+            (&n.op, n.src.iter().map(|s| remap[s]).collect())
+        })
+        .collect();
+    let outs: Vec<u32> = outputs.iter().map(|o| remap[o]).collect();
+    let ins: Vec<(u32, InputRole, &str)> =
+        inputs.iter().filter_map(|b| remap.get(&b.node).map(|&id| (id, b.role, b.name.as_str()))).collect();
+    write_blob(&nodes, &outs, &ins)
+}
+
+// nodes reachable from any of `roots`, topologically ordered (each after its sources). one
+// shared seen set across roots so the order is a valid dense-replay sequence.
+fn reachable_multi(g: &Graph, roots: &[NodeId]) -> Vec<NodeId> {
+    let mut order = Vec::new();
+    let mut seen = HashSet::new();
+    let mut stack: Vec<(NodeId, bool)> = roots.iter().rev().map(|&r| (r, false)).collect();
+    while let Some((id, expanded)) = stack.pop() {
+        if expanded {
+            order.push(id);
+            continue;
+        }
+        if !seen.insert(id) {
+            continue;
+        }
+        stack.push((id, true));
+        for &s in &g.node(id).src {
+            if !seen.contains(&s) {
+                stack.push((s, false));
+            }
+        }
+    }
+    order
+}
+
+// shared blob encoder: nodes already in dense id order, src as new-id u32s.
+fn write_blob(nodes: &[(&Op, Vec<u32>)], outputs: &[u32], inputs: &[(u32, InputRole, &str)]) -> Vec<u8> {
     let mut o = Vec::new();
     o.extend_from_slice(MAGIC);
     w_u8(&mut o, VERSION);
-    w_u32(&mut o, g.nodes.len() as u32);
-    for node in &g.nodes {
-        write_op(&mut o, &node.op);
-        w_u32(&mut o, node.src.len() as u32);
-        for s in &node.src {
-            w_u32(&mut o, s.0);
+    w_u32(&mut o, nodes.len() as u32);
+    for (op, src) in nodes {
+        write_op(&mut o, op);
+        w_u32(&mut o, src.len() as u32);
+        for &s in src {
+            w_u32(&mut o, s);
         }
     }
     w_u32(&mut o, outputs.len() as u32);
-    for out in outputs {
-        w_u32(&mut o, out.0);
+    for &out in outputs {
+        w_u32(&mut o, out);
     }
     w_u32(&mut o, inputs.len() as u32);
-    for b in inputs {
-        w_u32(&mut o, b.node.0);
-        let role = match b.role {
+    for &(node, role, name) in inputs {
+        w_u32(&mut o, node);
+        let r = match role {
             InputRole::Weight => 0,
             InputRole::Runtime => 1,
         };
-        w_u8(&mut o, role);
-        w_str(&mut o, &b.name);
+        w_u8(&mut o, r);
+        w_str(&mut o, name);
     }
     o
 }
@@ -653,6 +708,38 @@ mod tests {
         let want = interpret_with(&g, out, &feeds);
         let got = interpret_with(&r.graph, r.outputs[0], &feeds);
         assert_eq!(want, got);
+    }
+
+    // serialize_reachable drops arena nodes no output depends on, remaps to a dense range,
+    // and still computes the same value.
+    #[test]
+    fn reachable_prunes_dead_nodes() {
+        let mut g = Graph::new();
+        let x = g.input(vec![2, 3], DType::F32);
+        let w = g.constant(vec![2.0; 6], vec![2, 3]);
+        let _dead = g.push(Op::Neg, vec![w]); // reachable from w, but not an ancestor of `out`
+        let a = g.push(Op::Add, vec![x, w]);
+        let out = g.push(Op::Sum { axis: 1 }, vec![a]);
+
+        let outputs = vec![out];
+        let inputs = vec![InputBinding { node: x, role: InputRole::Runtime, name: "x".into() }];
+
+        let full = serialize_graph(&g, &outputs, &inputs);
+        let pruned = serialize_reachable(&g, &outputs, &inputs);
+        assert!(pruned.len() < full.len(), "the dead Neg node must be dropped");
+
+        let r = deserialize_graph(&pruned).expect("deserialize");
+        assert_eq!(r.inputs.len(), 1);
+        assert_eq!(r.inputs[0].name, "x");
+
+        // ids were remapped, so feed via the returned bindings, not the original NodeIds.
+        let mut feeds = Feeds::new();
+        feeds.insert(
+            r.inputs[0].node,
+            TensorVal { shape: vec![2, 3], storage: Storage::F32(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) },
+        );
+        let got = interpret_with(&r.graph, r.outputs[0], &feeds);
+        assert_eq!(got.f32().to_vec(), vec![12.0, 21.0]);
     }
 
     #[test]

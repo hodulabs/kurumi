@@ -24,7 +24,7 @@ pub use error::Error;
 pub use grad::grad;
 pub use graph::{
     ArgKind, Graph, InputBinding, InputRole, Node, NodeId, Op, Runnable, ScatterOp, amp, deserialize_graph, dump,
-    node_count, reachable, serialize_graph, simplify,
+    node_count, reachable, serialize_graph, serialize_reachable, simplify,
 };
 pub use interp::{Feeds, eval_op, interpret, interpret_many, interpret_with};
 pub(crate) use interp::{dot_dispatch, dot_general, reduce_v};

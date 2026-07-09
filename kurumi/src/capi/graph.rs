@@ -3,7 +3,7 @@
 use crate::capi::{KU_ERR, KuGraph, KuRunnable, build, catch, dtype_from_u32, raw_slice, set_err, usize_slice};
 use kurumi_core::{
     Graph, InputBinding, InputRole, NodeId, Storage, amp, deserialize_graph, dump, node_count, serialize_graph,
-    simplify,
+    serialize_reachable, simplify,
 };
 use std::ffi::{CStr, c_char};
 
@@ -156,13 +156,10 @@ pub unsafe extern "C" fn ku_node_dtype(g: *const KuGraph, node: u32) -> u32 {
 
 // runnable-graph serialization (the .hodu graph section)
 
-/// Serialize the graph plus its output nodes and input bindings into a self-contained blob.
-/// `outputs` (n_out node ids) are the roots to eval; `in_nodes`/`in_roles`/`in_names` (n_in
-/// each) bind each Input node to a name and a role (0 = weight bound by name, 1 = runtime
-/// feed); `in_names` is an array of NUL-terminated UTF-8 strings. Size-then-write: pass
-/// cap=0 with out=NULL to get the length, then a buffer of that size. Returns the full length.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn ku_graph_serialize(
+// shared marshaling for ku_graph_serialize[_reachable]: build the input bindings from the C
+// arrays, serialize (whole arena or reachable cone), then size-then-write into `out`.
+unsafe fn serialize_impl(
+    reachable: bool,
     g: *const KuGraph,
     outputs: *const u32,
     n_out: usize,
@@ -192,12 +189,51 @@ pub unsafe extern "C" fn ku_graph_serialize(
         let node = NodeId(nodes.get(i).copied().unwrap_or(KU_ERR));
         inputs.push(InputBinding { node, role, name });
     }
-    let blob = serialize_graph(gr, &out_ids, &inputs);
+    let blob =
+        if reachable { serialize_reachable(gr, &out_ids, &inputs) } else { serialize_graph(gr, &out_ids, &inputs) };
     let n = blob.len().min(cap);
     if n > 0 && !out.is_null() {
         std::ptr::copy_nonoverlapping(blob.as_ptr(), out, n);
     }
     blob.len()
+}
+
+/// Serialize the graph plus its output nodes and input bindings into a self-contained blob.
+/// `outputs` (n_out node ids) are the roots to eval; `in_nodes`/`in_roles`/`in_names` (n_in
+/// each) bind each Input node to a name and a role (0 = weight bound by name, 1 = runtime
+/// feed); `in_names` is an array of NUL-terminated UTF-8 strings. Size-then-write: pass
+/// cap=0 with out=NULL to get the length, then a buffer of that size. Returns the full length.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_graph_serialize(
+    g: *const KuGraph,
+    outputs: *const u32,
+    n_out: usize,
+    in_nodes: *const u32,
+    in_roles: *const u8,
+    in_names: *const *const c_char,
+    n_in: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    serialize_impl(false, g, outputs, n_out, in_nodes, in_roles, in_names, n_in, out, cap)
+}
+
+/// Like [`ku_graph_serialize`] but writes only the nodes reachable from `outputs`, remapped
+/// to a dense id range -- dropping backward/dead arena nodes so a training graph exports a
+/// clean inference program. Unreachable input bindings are omitted.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_graph_serialize_reachable(
+    g: *const KuGraph,
+    outputs: *const u32,
+    n_out: usize,
+    in_nodes: *const u32,
+    in_roles: *const u8,
+    in_names: *const *const c_char,
+    n_in: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    serialize_impl(true, g, outputs, n_out, in_nodes, in_roles, in_names, n_in, out, cap)
 }
 
 /// Deserialize a blob from [`ku_graph_serialize`] into a runnable handle (rebuilt graph +

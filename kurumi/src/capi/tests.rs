@@ -499,6 +499,36 @@ fn capi_graph_serialize_round_trips() {
         ku_tensor_free(ftv);
         ku_feeds_free(feeds);
 
+        // the reachable variant marshals + serializes through the same path (pruning is
+        // covered by the kurumi_core test); here it just round-trips a deserializable blob.
+        let rlen = ku_graph_serialize_reachable(
+            g,
+            outputs.as_ptr(),
+            1,
+            in_nodes.as_ptr(),
+            in_roles.as_ptr(),
+            in_names.as_ptr(),
+            1,
+            ptr::null_mut(),
+            0,
+        );
+        assert!(rlen > 0);
+        let mut rblob = vec![0u8; rlen];
+        ku_graph_serialize_reachable(
+            g,
+            outputs.as_ptr(),
+            1,
+            in_nodes.as_ptr(),
+            in_roles.as_ptr(),
+            in_names.as_ptr(),
+            1,
+            rblob.as_mut_ptr(),
+            rlen,
+        );
+        let rh2 = ku_graph_deserialize(rblob.as_ptr(), rblob.len());
+        assert!(!rh2.is_null());
+        ku_runnable_free(rh2);
+
         // malformed blob -> null + message, not a panic.
         assert!(ku_graph_deserialize(b"nope".as_ptr(), 4).is_null());
         assert!(!ku_last_error().is_null());
