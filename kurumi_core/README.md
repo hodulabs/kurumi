@@ -9,6 +9,7 @@ The engine core of [kurumi](https://github.com/hodulabs/kurumi): a closed-primit
 - **Static shapes, dtype-native compute.** Shape and dtype are inferred once at record time and stored on the node. 17 dtypes (bool, integers, f8/f16/bf16/f32/f64, complex); low-precision floats accumulate in f32.
 - **View-fused realize.** A faster CPU path: movement only rewrites a read view over a shared buffer (0 copies) and elementwise chains fuse into one pass, materializing only at a boundary (reduce, contraction, output, multi-consumer node).
 - **Counter-based RNG.** threefry2x32 (`Key`) is stateless, reproducible, and bit-identical across CPU and GPU.
+- **Serializable IR.** The graph encodes to a compact binary blob (`serialize_graph` / `serialize_reachable` / `deserialize_graph`); a runtime rebuilds it by replaying the primitive ops and runs it with no model code -- what lets a `.hodu` carry a self-executing graph.
 
 ## Example
 
@@ -24,7 +25,7 @@ let out = CpuBackend.eval(&g, y);   // TensorVal, checked against the interprete
 
 ## Layout
 
-- `graph/` -- the IR: `op.rs` (primitives), `ops/` (builders by domain), inference, passes
+- `graph/` -- the IR: `op.rs` (primitives), `ops/` (builders by domain), inference, passes, binary `serialize`
 - `interp/` -- the reference interpreter (oracle)
 - `grad/` -- reverse-mode VJP rules
 - `realize/`, `lower/` -- the view-fused evaluator and its index-expression lowering

@@ -4,6 +4,7 @@
 //! crate-type (see kurumi.h); this validates the ABI behavior.
 
 use crate::capi::eval::*;
+use crate::capi::graph::build::*;
 use crate::capi::graph::*;
 use crate::capi::ops::nn::{conv::*, pool::*};
 use crate::capi::ops::*;
@@ -288,6 +289,7 @@ const CAPI_SRCS: &[&str] = &[
     include_str!("ops/spatial.rs"),
     include_str!("ops/stats.rs"),
     include_str!("graph.rs"),
+    include_str!("graph/build.rs"),
     include_str!("eval.rs"),
     include_str!("tensor.rs"),
     include_str!("../capi.rs"),

@@ -2,10 +2,10 @@
 //! Jacobi), reduced `qr` (Householder), general `eigvals` (QR algorithm), one solver per
 //! submodule. Direct LU/Cholesky solvers stay in the parent `linalg`.
 
+mod eigh;
 mod eigvals;
-mod jacobi;
 mod qr;
 
+pub(crate) use eigh::eigh;
 pub(crate) use eigvals::eigvals;
-pub(crate) use jacobi::eigh;
 pub(crate) use qr::qr;

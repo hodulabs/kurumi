@@ -5,7 +5,7 @@ The top-level crate of the [kurumi](https://github.com/hodulabs/kurumi) engine: 
 ## What it provides
 
 - **Rust facade.** Re-exports all of [`kurumi_core`](../kurumi_core) and exposes [`kurumi_metal`](../kurumi_metal) as `kurumi::metal` on macOS.
-- **C ABI.** A stable C interface over the graph builder, backends, autograd, and graph passes -- every builder op, every dtype, plus plan-replay and graph inspection. Built as `cdylib` and `staticlib`; the header is [`include/kurumi.h`](include/kurumi.h).
+- **C ABI.** A stable C interface over the graph builder, backends, autograd, and graph passes -- every builder op, every dtype, plus plan-replay, graph inspection, and graph (de)serialization (`ku_graph_serialize` / `ku_graph_deserialize`). Built as `cdylib` and `staticlib`; the header is [`include/kurumi.h`](include/kurumi.h).
 
 ## Example (Rust)
 
