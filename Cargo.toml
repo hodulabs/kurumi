@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-repository = "https://github.com/hodu-labs/kurumi"
+repository = "https://github.com/hodulabs/kurumi"
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.clippy]

@@ -1,6 +1,6 @@
 # kurumi_core
 
-The engine core of [kurumi](https://github.com/hodu-labs/kurumi): a closed-primitive tensor IR, a reference interpreter, reverse-mode autograd, and a view-fused CPU evaluator. Pure Rust; f32 matmul uses the system BLAS (Accelerate on macOS, the `gemm` crate elsewhere).
+The engine core of [kurumi](https://github.com/hodulabs/kurumi): a closed-primitive tensor IR, a reference interpreter, reverse-mode autograd, and a view-fused CPU evaluator. Pure Rust; f32 matmul uses the system BLAS (Accelerate on macOS, the `gemm` crate elsewhere).
 
 ## Design
 

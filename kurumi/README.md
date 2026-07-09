@@ -1,6 +1,6 @@
 # kurumi
 
-The top-level crate of the [kurumi](https://github.com/hodu-labs/kurumi) engine: it re-exports the core, selects the Metal backend on Apple Silicon, and exposes the C ABI.
+The top-level crate of the [kurumi](https://github.com/hodulabs/kurumi) engine: it re-exports the core, selects the Metal backend on Apple Silicon, and exposes the C ABI.
 
 ## What it provides
 

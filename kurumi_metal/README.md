@@ -1,6 +1,6 @@
 # kurumi_metal
 
-The Apple Silicon backend for [kurumi](https://github.com/hodu-labs/kurumi): a Metal implementation of `kurumi_core::Backend`. macOS only.
+The Apple Silicon backend for [kurumi](https://github.com/hodulabs/kurumi): a Metal implementation of `kurumi_core::Backend`. macOS only.
 
 ## Design
 
