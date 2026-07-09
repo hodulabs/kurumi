@@ -109,3 +109,55 @@ macro_rules! rmsnorm_impl {
 }
 rmsnorm_impl!(rmsnorm_f32, f32);
 rmsnorm_impl!(rmsnorm_f64, f64);
+
+// SDPA oracle: scores = (q@k^T)/sqrt(dh) [+ causal -inf upper-triangle], softmax over keys,
+// then @v. Reuses the exact dot + softmax kernels the decomposition lowers to, so the fused
+// primitive matches the decomposition bit-for-bit. q,k,v same shape [.., S, dh] (scores square).
+pub(crate) fn sdpa_v(q: &TensorVal, k: &TensorVal, v: &TensorVal, causal: bool) -> TensorVal {
+    let r = q.shape.len();
+    let (s, dh) = (q.shape[r - 2], q.shape[r - 1]);
+    let batch: Vec<usize> = (0..r - 2).collect();
+    let raw = super::dot_dispatch(q, k, &[r - 1], &[r - 1], &batch, &batch); // q@k^T -> [.., S, S]
+    let scores = scale_causal(&raw, 1.0 / (dh as f32).sqrt(), s, causal);
+    let attn = softmax_v(&scores.storage, &scores.shape, r - 1); // over keys (last axis)
+    super::dot_dispatch(&attn, v, &[r - 1], &[r - 2], &batch, &batch) // attn@v -> [.., S, dh]
+}
+
+// scale by 1/sqrt(dh) and apply the causal -inf mask (key j > query i), preserving dtype.
+// low-precision floats compute in f32 (matching the dot/softmax accumulator); f64 native.
+fn scale_causal(raw: &TensorVal, scale: f32, s: usize, causal: bool) -> TensorVal {
+    let dt = raw.storage.dtype();
+    let storage = match dt {
+        DType::F64 => {
+            let Storage::F64(v) = &raw.storage else { unreachable!() };
+            Storage::F64(scale_causal_f64(v, s, scale as f64, causal))
+        }
+        _ => {
+            let f = cast(&raw.storage, DType::F32);
+            let Storage::F32(v) = &f else { unreachable!() };
+            let out = Storage::F32(scale_causal_f32(v, s, scale, causal));
+            if dt == DType::F32 { out } else { cast(&out, dt) }
+        }
+    };
+    TensorVal { shape: raw.shape.clone(), storage }
+}
+
+macro_rules! scale_causal_impl {
+    ($name:ident, $t:ty) => {
+        fn $name(data: &[$t], s: usize, scale: $t, causal: bool) -> Vec<$t> {
+            let block = s * s; // one [S, S] score matrix per batch element
+            let mut out = vec![0 as $t; data.len()];
+            for base in (0..data.len()).step_by(block.max(1)) {
+                for i in 0..s {
+                    for j in 0..s {
+                        let idx = base + i * s + j;
+                        out[idx] = if causal && j > i { <$t>::NEG_INFINITY } else { data[idx] * scale };
+                    }
+                }
+            }
+            out
+        }
+    };
+}
+scale_causal_impl!(scale_causal_f32, f32);
+scale_causal_impl!(scale_causal_f64, f64);

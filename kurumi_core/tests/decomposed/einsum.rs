@@ -71,3 +71,38 @@ fn einsum_diagonal_and_multi() {
     let ew = g.einsum("i,i,i->i", &[u, v, w]).unwrap();
     assert_eq!(interpret(&g, ew).f32(), &[15., 48.]);
 }
+
+// outer products (no contracted index) with reordered / interleaved output -- exercises
+// dot_general with empty contract/batch, which the VQE kron path relies on.
+#[test]
+fn einsum_outer_products() {
+    let mut g = Graph::new();
+    let a = g.constant(vec![1., 2., 3., 4.], vec![2, 2]);
+    let b = g.constant(vec![5., 6., 7., 8.], vec![2, 2]);
+    let base = g.dot_general(a, b, vec![], vec![], vec![], vec![]).unwrap(); // [i,j,k,l]
+    // ij,kl->ijkl (natural order) == the bare outer product
+    let ijkl = g.einsum("ij,kl->ijkl", &[a, b]).unwrap();
+    assert_eq!(interpret(&g, ijkl).shape, vec![2, 2, 2, 2]);
+    assert_eq!(interpret(&g, ijkl).f32(), interpret(&g, base).f32());
+    // ij,kl->ikjl (interleaved reorder) == permute(base, [0,2,1,3]) -- the bug case
+    let ikjl = g.einsum("ij,kl->ikjl", &[a, b]).unwrap();
+    let ref_ikjl = g.permute(base, vec![0, 2, 1, 3]).unwrap();
+    assert_eq!(interpret(&g, ikjl).shape, vec![2, 2, 2, 2]);
+    assert_eq!(interpret(&g, ikjl).f32(), interpret(&g, ref_ikjl).f32());
+    // ij,kl->klij (swapped) == permute(base, [2,3,0,1])
+    let klij = g.einsum("ij,kl->klij", &[a, b]).unwrap();
+    let ref_klij = g.permute(base, vec![2, 3, 0, 1]).unwrap();
+    assert_eq!(interpret(&g, klij).f32(), interpret(&g, ref_klij).f32());
+    // vector outer i,j->ij
+    let v = g.constant(vec![1., 2.], vec![2]);
+    let w = g.constant(vec![3., 4., 5.], vec![3]);
+    let vw = g.einsum("i,j->ij", &[v, w]).unwrap();
+    assert_eq!(interpret(&g, vw).shape, vec![2, 3]);
+    assert_eq!(interpret(&g, vw).f32(), &[3., 4., 5., 6., 8., 10.]);
+    // scalar stack (the actual VQE failure path): stack of rank-0 nodes -> [n]
+    let s0 = g.constant(vec![9.], vec![]);
+    let s1 = g.constant(vec![10.], vec![]);
+    let st = g.stack(&[s0, s1], 0).unwrap();
+    assert_eq!(interpret(&g, st).shape, vec![2]);
+    assert_eq!(interpret(&g, st).f32(), &[9., 10.]);
+}

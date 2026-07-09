@@ -22,7 +22,9 @@ impl Graph {
     /// values on the main diagonal (inverse of `diagonal`): `v.unsqueeze(-1) * I`.
     pub fn diag_embed(&mut self, v: NodeId) -> Result<NodeId, Error> {
         let sh = self.shape(v);
-        let n = *sh.last().expect("diag_embed needs a trailing axis");
+        let Some(&n) = sh.last() else {
+            return Err(Error::shape("diag_embed", "expects [.., N] (rank >= 1)"));
+        };
         let vu = self.unsqueeze(v, sh.len())?; // [.., N, 1]
         let mut full = sh.clone();
         full.push(n); // [.., N, N]

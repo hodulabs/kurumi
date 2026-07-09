@@ -221,6 +221,27 @@ fn layernorm_matches_reference() {
     }
 }
 
+// Oracle contract: `interpret_many` over several outputs that share a subgraph is
+// BIT-EXACT (shape + storage) with `interpret_with` per output. The shared forward
+// trunk under many grads computes once, but every value must be identical to the
+// naive per-node interpret -- backends are checked against this equality.
+#[test]
+fn interpret_many_matches_single_per_node() {
+    // y = (a*b).sum, plus its grads wrt a and b: three outputs sharing the a*b trunk.
+    let mut g = Graph::new();
+    let a = g.constant(vec![1., 2., 3., 4.], vec![4]);
+    let b = g.constant(vec![5., 6., 7., 8.], vec![4]);
+    let p = g.mul(a, b).unwrap();
+    let y = g.sum(p, 0).unwrap();
+    let gnodes = grad(&mut g, y, &[a, b]).unwrap();
+    let outs = [y, gnodes[0], gnodes[1]];
+
+    let feeds = Feeds::new();
+    let many = interpret_many(&g, &outs, &feeds);
+    let single: Vec<TensorVal> = outs.iter().map(|&o| interpret_with(&g, o, &feeds)).collect();
+    assert_eq!(many, single, "interpret_many must equal interpret_with per node (shape + storage)");
+}
+
 // full GPT-2-style block (single head): realize (fused) matches the oracle
 #[test]
 fn transformer_block_matches_oracle() {

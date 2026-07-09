@@ -13,6 +13,12 @@ pub trait Backend {
     /// with fresh feeds. (`eval` is the no-input convenience.)
     fn eval_with(&self, g: &Graph, id: NodeId, feeds: &Feeds) -> TensorVal;
 
+    /// Evaluate several nodes in one shared pass (shared subgraphs compute once).
+    /// Default maps `eval_with` per id (correct but not shared); backends override.
+    fn eval_many_with(&self, g: &Graph, ids: &[NodeId], feeds: &Feeds) -> Vec<TensorVal> {
+        ids.iter().map(|&id| self.eval_with(g, id, feeds)).collect()
+    }
+
     /// Evaluate a graph with no `Input` nodes (baked constants only).
     fn eval(&self, g: &Graph, id: NodeId) -> TensorVal {
         self.eval_with(g, id, &Feeds::new())
@@ -28,6 +34,9 @@ impl Backend for CpuBackend {
     }
     fn eval_with(&self, g: &Graph, id: NodeId, feeds: &Feeds) -> TensorVal {
         crate::interpret_with(g, id, feeds)
+    }
+    fn eval_many_with(&self, g: &Graph, ids: &[NodeId], feeds: &Feeds) -> Vec<TensorVal> {
+        crate::interpret_many(g, ids, feeds)
     }
 }
 

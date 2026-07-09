@@ -4,6 +4,7 @@
 use crate::MetalBackend;
 use crate::backend::eval::Val;
 use crate::dtype::dev_dtype;
+use crate::msl::nn::SDPA_MAX_DH;
 use kurumi_core::{DType, Feeds, Graph, Node, NodeId, Op};
 use std::collections::HashMap;
 
@@ -40,6 +41,24 @@ impl MetalBackend {
             let a = self.to_dev(&self.eval_memo(g, node.src[0], feeds, memo));
             let buf = self.ctx.rmsnorm_dev(&a, axis_len, inner, n_lines, out_n, *eps, dt);
             return Some(Val::Dev { buf, shape: shape.to_vec(), dt });
+        }
+        if let Op::Sdpa { causal } = &node.op
+            && dt == DType::F32
+        {
+            // fused flash-attention forward (online softmax, no SxS materialization). f32 only;
+            // dh over the thread-local acc bound -> None, falling to the CPU oracle (eval_fused
+            // host path), so correctness is never lost. q,k,v share shape [..batch.., S, dh].
+            let qs = g.shape(node.src[0]);
+            let r = qs.len();
+            let (s, dh) = (qs[r - 2], qs[r - 1]);
+            if dh <= SDPA_MAX_DH {
+                let batch: usize = qs[..r - 2].iter().product();
+                let q = self.to_dev(&self.eval_memo(g, node.src[0], feeds, memo));
+                let k = self.to_dev(&self.eval_memo(g, node.src[1], feeds, memo));
+                let v = self.to_dev(&self.eval_memo(g, node.src[2], feeds, memo));
+                let buf = self.ctx.sdpa_dev(&q, &k, &v, batch, s, dh, *causal);
+                return Some(Val::Dev { buf, shape: shape.to_vec(), dt });
+            }
         }
         None
     }

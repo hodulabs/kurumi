@@ -49,6 +49,23 @@ pub unsafe extern "C" fn ku_pad(g: *mut KuGraph, x: u32, pads: *const usize, ran
     let pads: Vec<(usize, usize)> = (0..rank).map(|i| (p[2 * i], p[2 * i + 1])).collect();
     build(g, |gr| gr.pad(NodeId(x), pads))
 }
+/// Non-zero padding per axis: `pads` is `2*rank` usize (lo,hi pairs); `mode` selects the
+/// fill rule: 0=reflect, 1=replicate, 2=circular (see `Graph::pad_mode`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_pad_mode(g: *mut KuGraph, x: u32, pads: *const usize, rank: usize, mode: u32) -> u32 {
+    let m = match mode {
+        0 => "reflect",
+        1 => "replicate",
+        2 => "circular",
+        _ => {
+            set_err(format!("ku_pad_mode: bad mode {mode} (0=reflect, 1=replicate, 2=circular)"));
+            return KU_ERR;
+        }
+    };
+    let p = usize_slice(pads, rank * 2);
+    let pads: Vec<(usize, usize)> = (0..rank).map(|i| (p[2 * i], p[2 * i + 1])).collect();
+    build(g, |gr| gr.pad_mode(NodeId(x), pads, m))
+}
 /// Concat `parts` (n node ids) along `axis`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ku_concat(g: *mut KuGraph, parts: *const u32, n: usize, axis: usize) -> u32 {

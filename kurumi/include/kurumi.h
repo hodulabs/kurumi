@@ -253,6 +253,8 @@ KuNode ku_transpose(KuGraph *g, KuNode x, size_t i, size_t j);
 KuNode ku_flip(KuGraph *g, KuNode x, const size_t *axes, size_t n);
 KuNode ku_slice(KuGraph *g, KuNode x, const size_t *ranges, size_t rank); /* 2*rank (start,end) */
 KuNode ku_pad(KuGraph *g, KuNode x, const size_t *pads, size_t rank);     /* 2*rank (lo,hi), 0 */
+/* non-zero padding: mode 0=reflect, 1=replicate, 2=circular */
+KuNode ku_pad_mode(KuGraph *g, KuNode x, const size_t *pads, size_t rank, uint32_t mode); /* 2*rank (lo,hi) */
 KuNode ku_concat(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
 KuNode ku_stack(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
 /* split x into n pieces of `sizes` along axis; piece ids -> out[0..n]. 0 ok / KU_ERR. */
@@ -393,6 +395,10 @@ KuBackend *ku_backend_new(uint32_t kind); /* NULL if unavailable */
 void ku_backend_free(KuBackend *b);
 KuTensor *ku_eval(KuGraph *g, KuNode node, const KuBackend *backend);
 KuTensor *ku_eval_with(KuGraph *g, KuNode node, const KuBackend *backend, const KuFeeds *feeds);
+/* Evaluate n `ids` in one shared pass (a subgraph common to them computes once) ->
+ * out[0..n], each a fresh KuTensor (free via ku_tensor_free). 0 ok, -1 err. */
+int32_t ku_eval_many(KuGraph *g, const KuNode *ids, size_t n, const KuBackend *backend, const KuFeeds *feeds,
+                     KuTensor **out);
 
 /* Reverse-mode grads of sum(out) wrt n `wrt` nodes -> out_grads[0..n]. 0 ok, -1 err. */
 int32_t ku_grad(KuGraph *g, KuNode out, const KuNode *wrt, size_t n, KuNode *out_grads);
@@ -404,6 +410,12 @@ size_t ku_node_count(const KuGraph *g, KuNode root);
 /* Write up to `cap` bytes of the graph dump into `out` (UTF-8, no NUL); returns full
  * length. Call with cap=0 to size the buffer first. */
 size_t ku_dump(const KuGraph *g, KuNode root, uint8_t *out, size_t cap);
+/* Shape / dtype of a node, so a frontend can broadcast / promote before the strict
+ * builder ops. ku_node_rank sizes the buffer for ku_node_shape (SIZE_MAX on error);
+ * ku_node_dtype returns a KuDType index (KU_ERR on error). */
+size_t ku_node_rank(const KuGraph *g, KuNode node);
+void ku_node_shape(const KuGraph *g, KuNode node, size_t *out);
+uint32_t ku_node_dtype(const KuGraph *g, KuNode node);
 
 /* plan-replay: compile once, run per feeds (consts never re-copied) */
 KuPlan *ku_plan_compile(const KuGraph *g, KuNode node); /* NULL if off the f32 fused path */

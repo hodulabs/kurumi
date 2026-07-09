@@ -32,8 +32,12 @@ impl MetalBackend {
             let seed = match &seed.storage {
                 Storage::I64(v) => v[0] as u64,
                 Storage::I32(v) => v[0] as u64,
+                Storage::I16(v) => v[0] as u64,
+                Storage::I8(v) => v[0] as u64,
                 Storage::U64(v) => v[0],
                 Storage::U32(v) => v[0] as u64,
+                Storage::U16(v) => v[0] as u64,
+                Storage::U8(v) => v[0] as u64,
                 _ => panic!("metal: rand seed must be integer"),
             };
             let n: usize = shape.iter().product();

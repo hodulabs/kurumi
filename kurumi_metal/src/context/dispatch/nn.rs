@@ -3,7 +3,7 @@
 use crate::Buffer;
 use crate::context::{MetalContext, set_u32};
 use crate::dtype::msl_ty;
-use crate::msl::nn::{rmsnorm_msl, softmax_msl};
+use crate::msl::nn::{rmsnorm_msl, sdpa_flash_msl, softmax_msl};
 use kurumi_core::DType;
 use objc2_metal::MTLComputeCommandEncoder;
 
@@ -60,6 +60,42 @@ impl MetalContext {
                 enc.setBytes_length_atIndex(ptr, 4, 4);
             },
             n_lines,
+        );
+        out
+    }
+
+    /// Flash-attention FORWARD (online softmax): ONE thread per (batch, query-row); grid =
+    /// `batch*s`. q,k,v are `[batch, s, dh]` flattened f32 buffers; out is `[batch, s, dh]`.
+    /// Never materializes the SxS scores (O(dh) per-thread state). `scale` = 1/sqrt(dh) is
+    /// host-computed to match the oracle exactly. Caller guarantees `dh <= SDPA_MAX_DH`.
+    pub(crate) fn sdpa_dev(
+        &self,
+        q: &Buffer,
+        k: &Buffer,
+        v: &Buffer,
+        batch: usize,
+        s: usize,
+        dh: usize,
+        causal: bool,
+    ) -> Buffer {
+        Self::tick(2);
+        let pso = self.cached(&sdpa_flash_msl(), "sdpa_flash_k");
+        let out = self.empty(batch * s * dh, DType::F32);
+        let scale = 1.0f32 / (dh as f32).sqrt();
+        self.run_1d(
+            &pso,
+            |enc| unsafe {
+                enc.setBuffer_offset_atIndex(Some(q), 0, 0);
+                enc.setBuffer_offset_atIndex(Some(k), 0, 1);
+                enc.setBuffer_offset_atIndex(Some(v), 0, 2);
+                enc.setBuffer_offset_atIndex(Some(&out), 0, 3);
+                set_u32(enc, s as u32, 4);
+                set_u32(enc, dh as u32, 5);
+                let sp = std::ptr::NonNull::new(&scale as *const f32 as *mut std::ffi::c_void).unwrap();
+                enc.setBytes_length_atIndex(sp, 4, 6);
+                set_u32(enc, causal as u32, 7);
+            },
+            batch * s,
         );
         out
     }

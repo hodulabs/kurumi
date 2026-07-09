@@ -137,9 +137,10 @@ fn metal_attention_block_matches_cpu() {
     }
 }
 
-// full GPT-style causal multi-head attention (batch=[B,H]) forward AND backward
-// on the GPU: batched Q@K^T, scaled, causal-masked, softmax, @V, and the grads
-// (transposed batched GEMMs + softmax/mask backward) must match the CPU oracle.
+// GPT-style causal multi-head attention (batch=[B,H]) via the fused Op::Sdpa PRIMITIVE:
+// forward = the device flash kernel (online softmax), backward = the Op::Sdpa VJP graph
+// (transposed batched GEMMs + softmax/mask backward). Built directly with sdpa_fused so the
+// flash kernel is exercised regardless of g.sdpa's memory threshold. Both match the CPU oracle.
 #[test]
 fn metal_causal_sdpa_fwd_bwd_matches_cpu() {
     use kurumi_core::{Backend, grad};
@@ -152,7 +153,7 @@ fn metal_causal_sdpa_fwd_bwd_matches_cpu() {
     let q = g.constant(mk(0), vec![b, h, s, dh]);
     let k = g.constant(mk(3), vec![b, h, s, dh]);
     let v = g.constant(mk(7), vec![b, h, s, dh]);
-    let out = g.sdpa(q, k, v, true).unwrap(); // causal multi-head attention
+    let out = g.sdpa_fused(q, k, v, true).unwrap(); // primitive directly: flash fwd + VJP bwd (g.sdpa threshold-gates flash)
 
     let gpu = metal.eval(&g, out);
     let cpu = interpret(&g, out);
@@ -173,6 +174,35 @@ fn metal_causal_sdpa_fwd_bwd_matches_cpu() {
         assert_eq!(gg.shape, cg.shape);
         for (p, w) in gg.f32().iter().zip(cg.f32()) {
             assert!((p - w).abs() < 1e-2, "bwd {p} vs {w}");
+        }
+    }
+}
+
+// The fused Op::Sdpa forward runs the device flash kernel (online softmax, no SxS
+// materialization); it must match the CPU interpret oracle (standard row-max softmax) for
+// both causal modes across a few [B,H,S,dh] shapes, incl S not a round number (odd tail
+// rows / partial causal spans) and dh at 4/8/16 -- guarding online-softmax numerical drift.
+#[test]
+fn metal_sdpa_flash_forward_matches_cpu() {
+    use kurumi_core::Backend;
+    let Some(metal) = MetalBackend::new() else {
+        return;
+    };
+    for (b, h, s, dh) in [(2usize, 2usize, 7usize, 8usize), (1, 3, 5, 16), (2, 1, 9, 4)] {
+        let n = b * h * s * dh;
+        let mk = |seed: usize| (0..n).map(|i| (((i * 7 + seed) % 29) as f32) * 0.07 - 1.0).collect::<Vec<_>>();
+        for causal in [false, true] {
+            let mut g = Graph::new();
+            let q = g.constant(mk(0), vec![b, h, s, dh]);
+            let k = g.constant(mk(5), vec![b, h, s, dh]);
+            let v = g.constant(mk(11), vec![b, h, s, dh]);
+            let out = g.sdpa_fused(q, k, v, causal).unwrap(); // primitive directly -> flash kernel on Metal (g.sdpa threshold-gates it)
+            let gpu = metal.eval(&g, out);
+            let cpu = interpret(&g, out);
+            assert_eq!(gpu.shape, cpu.shape);
+            for (p, w) in gpu.f32().iter().zip(cpu.f32()) {
+                assert!((p - w).abs() < 1e-3, "b={b} h={h} s={s} dh={dh} causal={causal}: {p} vs {w}");
+            }
         }
     }
 }
@@ -395,5 +425,40 @@ fn metal_conv2d_matches_cpu() {
     assert_eq!(gpu.shape, cpu.shape);
     for (a, b) in gpu.f32().iter().zip(cpu.f32()) {
         assert!((a - b).abs() < 1e-3, "{a} vs {b}");
+    }
+}
+
+// The shared-memo eval_many_with override: several outputs sharing a forward trunk
+// (a device matmul + gelu) evaluate in ONE pass -- recycle once up front, then one
+// memo across all outputs, so the trunk (reused by the two grads) computes once. The
+// batched results must match per-node eval_with exactly: a reused/aliased shared buffer
+// that got corrupted mid-pass would diverge, so exact equality pins the shared path.
+#[test]
+fn metal_eval_many_matches_per_node() {
+    use kurumi_core::{Backend, Feeds, grad};
+    let Some(metal) = MetalBackend::new() else {
+        return;
+    };
+    let (m, k, n) = (4usize, 6, 5);
+    let mut g = Graph::new();
+    let a = g.constant((0..m * k).map(|i| ((i % 13) as f32) * 0.1 - 0.6).collect(), vec![m, k]);
+    let b = g.constant((0..k * n).map(|i| ((i % 7) as f32) * 0.05 - 0.15).collect(), vec![k, n]);
+    let t = {
+        let mm = g.dot_general(a, b, vec![1], vec![0], vec![], vec![]).unwrap(); // shared trunk
+        g.gelu(mm)
+    };
+    let mut y = t;
+    for ax in (0..2).rev() {
+        y = g.sum(y, ax).unwrap(); // y = sum(gelu(a@b))
+    }
+    let grads = grad(&mut g, y, &[a, b]).unwrap(); // ga, gb flow back through the shared trunk
+    let outs = [y, grads[0], grads[1]];
+    let feeds = Feeds::new();
+    let many = metal.eval_many_with(&g, &outs, &feeds);
+    assert_eq!(many.len(), outs.len());
+    for (o, batched) in outs.iter().zip(&many) {
+        let single = metal.eval_with(&g, *o, &feeds);
+        assert_eq!(batched.shape, single.shape, "shape mismatch for {o:?}");
+        assert_eq!(batched.f32(), single.f32(), "eval_many vs eval_with for {o:?}");
     }
 }

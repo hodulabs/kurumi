@@ -70,6 +70,7 @@ impl Graph {
             | Op::Where
             | Op::Softmax { .. }
             | Op::RmsNorm { .. } => ishape(0).to_vec(),
+            Op::Sdpa { .. } => ishape(0).to_vec(), // out = q's shape [.., S, dh]
             Op::Sum { axis } | Op::Prod { axis } | Op::ReduceMax { axis } | Op::ArgReduce { axis, .. } => {
                 let mut s = ishape(0).to_vec();
                 s.remove(*axis);

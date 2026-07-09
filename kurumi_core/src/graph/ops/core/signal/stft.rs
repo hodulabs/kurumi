@@ -96,12 +96,13 @@ impl Graph {
                 Some(a) => self.add(a, padded)?,
             });
         }
-        let den = den.unwrap();
-        let eps = self.scalar(den, 1e-8);
+        // den is Some here: nf > 0, since `num` above already errored on zero frames.
+        let den = den.expect("nf > 0");
+        let eps = self.scalar(den, 1e-8); // eps guards a divide by a zero-sum (degenerate) window
         let den = self.add(den, eps)?; // [L]
         let numsh = self.shape(num);
         let mut dsh = vec![1usize; numsh.len()];
-        *dsh.last_mut().unwrap() = l;
+        *dsh.last_mut().expect("num is >= 1-D ([.., L])") = l;
         let denr = self.reshape(den, dsh)?; // [1.., L]
         let denb = self.broadcast_to(denr, numsh)?;
         self.div(num, denb)

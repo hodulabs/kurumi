@@ -70,6 +70,36 @@ pub unsafe extern "C" fn ku_eval_with(
     catch(ptr::null_mut(), || Box::into_raw(Box::new(KuTensor(b.eval_with(gr, NodeId(node), fe)))))
 }
 
+/// Evaluate `n` nodes in ONE shared pass (a subgraph common to the `ids` -- e.g. the
+/// forward trunk under several grad nodes -- computes once), writing a freshly-allocated
+/// `KuTensor` for each into `out[0..n]` (free each via `ku_tensor_free`). `Input` nodes
+/// come from `feeds`. Returns 0 on success, -1 on error (see `ku_last_error`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ku_eval_many(
+    g: *mut KuGraph,
+    ids: *const u32,
+    n: usize,
+    backend: *const KuBackend,
+    feeds: *const KuFeeds,
+    out: *mut *mut KuTensor,
+) -> i32 {
+    if g.is_null() || backend.is_null() || feeds.is_null() || out.is_null() || (ids.is_null() && n > 0) {
+        set_err("ku_eval_many: null graph/backend/feeds/ids/out handle".into());
+        return -1;
+    }
+    let ids: Vec<NodeId> = raw_slice(ids, n).iter().map(|&x| NodeId(x)).collect();
+    let (b, gr, fe) = (&(*backend).0, &(*g).0, &(*feeds).0);
+    catch(-1, || {
+        let vs = b.eval_many_with(gr, &ids, fe);
+        unsafe {
+            for (i, v) in vs.into_iter().enumerate() {
+                *out.add(i) = Box::into_raw(Box::new(KuTensor(v)));
+            }
+        }
+        0
+    })
+}
+
 /// Reverse-mode gradients of `sum(out)` w.r.t. each of the `n` `wrt` nodes, written
 /// into `out_grads[0..n]`. Returns 0 on success, -1 on error (see `ku_last_error`).
 #[unsafe(no_mangle)]

@@ -30,7 +30,8 @@ pub(super) fn vjp(
             acc(g, cot, s[0], gx)?;
         }
         Op::Prod { axis } => {
-            // dy/da_i = (prod / a_i) ; uses recip (NaN/inf if a_i == 0)
+            // dy/da_i = (prod / a_i) via recip: NaN/inf if any a_i == 0 (a stable fix
+            // needs log-domain accumulation of the product; not done).
             let full = g.shape(s[0]);
             let yb = g.broadcast_back(id, &full, *axis)?;
             let ctb = g.broadcast_back(ct, &full, *axis)?;

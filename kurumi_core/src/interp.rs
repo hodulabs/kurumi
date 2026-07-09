@@ -62,6 +62,13 @@ pub fn interpret_with(g: &Graph, id: NodeId, feeds: &Feeds) -> TensorVal {
     interpret_memo(g, id, feeds, &mut HashMap::new())
 }
 
+/// Interpret several outputs sharing one memo pass: a subgraph common to the
+/// requested nodes (the forward trunk under many grads) computes once.
+pub fn interpret_many(g: &Graph, ids: &[NodeId], feeds: &Feeds) -> Vec<TensorVal> {
+    let mut memo = std::collections::HashMap::new();
+    ids.iter().map(|&id| interpret_memo(g, id, feeds, &mut memo)).collect()
+}
+
 fn interpret_memo(g: &Graph, id: NodeId, feeds: &Feeds, memo: &mut HashMap<NodeId, TensorVal>) -> TensorVal {
     if let Some(v) = memo.get(&id) {
         return v.clone();
@@ -183,6 +190,7 @@ pub fn eval_op(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
         Op::ArgReduce { axis, kind } => arg_reduce(inputs[0], *axis, *kind),
         Op::Softmax { axis } => nn::softmax_v(&inputs[0].storage, &inputs[0].shape, *axis),
         Op::RmsNorm { axis, eps } => nn::rmsnorm_v(&inputs[0].storage, &inputs[0].shape, *axis, *eps),
+        Op::Sdpa { causal } => nn::sdpa_v(inputs[0], inputs[1], inputs[2], *causal),
         Op::Reshape { shape } => TensorVal { shape: shape.clone(), storage: inputs[0].storage.clone() },
         Op::Permute { perm } => {
             let a = inputs[0];

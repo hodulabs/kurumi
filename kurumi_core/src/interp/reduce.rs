@@ -12,10 +12,18 @@ pub(crate) fn arg_reduce(tv: &TensorVal, axis: usize, kind: ArgKind) -> TensorVa
         Storage::F64(v) => arg_reduce_t(v, &tv.shape, axis, min),
         Storage::F16(v) => arg_reduce_t(v, &tv.shape, axis, min),
         Storage::BF16(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::I8(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::I16(v) => arg_reduce_t(v, &tv.shape, axis, min),
         Storage::I32(v) => arg_reduce_t(v, &tv.shape, axis, min),
         Storage::I64(v) => arg_reduce_t(v, &tv.shape, axis, min),
-        Storage::U32(v) => arg_reduce_t(v, &tv.shape, axis, min),
         Storage::U8(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::U16(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::U32(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::U64(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        // fp8 impl PartialOrd, so the generic kernel orders them directly.
+        Storage::F8E4M3(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        Storage::F8E5M2(v) => arg_reduce_t(v, &tv.shape, axis, min),
+        // only BOOL/complex reach here; reduce_check already rejects them at build time.
         s => panic!("argreduce on non-orderable dtype {:?}", s.dtype()),
     }
 }

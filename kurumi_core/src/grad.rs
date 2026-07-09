@@ -103,8 +103,16 @@ fn vjp(g: &mut Graph, id: NodeId, ct: NodeId, cot: &mut HashMap<NodeId, NodeId>)
         | Op::ArgReduce { .. }
         | Op::Argsort { .. }
         | Op::RandUniform { .. }
-        | Op::QuantMatmul { .. } // frozen weights, inference-only
-        | Op::Eigvals => {}
+        | Op::QuantMatmul { .. } => {} // frozen weights, inference-only
+
+        // general (non-symmetric) eigenvalues: the VJP is unimplemented, so error loudly
+        // rather than return a silent zero gradient (use eigh for symmetric matrices).
+        Op::Eigvals => {
+            return Err(Error::shape(
+                "eigvals backward",
+                "eigvals is not differentiable (use eigh for symmetric matrices)",
+            ));
+        }
 
         // dense linalg VJPs (batched matrix helpers live with them in grad/linalg.rs)
         Op::Solve => linalg::solve_vjp(g, id, s, ct, cot)?,
@@ -132,7 +140,7 @@ fn vjp(g: &mut Graph, id: NodeId, ct: NodeId, cot: &mut HashMap<NodeId, NodeId>)
         // reductions
         Op::Sum { .. } | Op::ReduceMax { .. } | Op::Prod { .. } => reduce::vjp(g, id, &n, ct, cot)?,
         // fused nn primitives
-        Op::Softmax { .. } | Op::RmsNorm { .. } => nn::vjp(g, id, &n, ct, cot)?,
+        Op::Softmax { .. } | Op::RmsNorm { .. } | Op::Sdpa { .. } => nn::vjp(g, id, &n, ct, cot)?,
         // movement (reshape/permute/expand/slice/flip/pad)
         Op::Reshape { .. }
         | Op::Permute { .. }

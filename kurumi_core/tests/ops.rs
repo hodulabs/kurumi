@@ -267,3 +267,97 @@ fn sdpa_causal_first_query_attends_to_first_key() {
         assert!((o.f32()[d] - (1.0 + d as f32)).abs() < 1e-5, "out[0,{d}] = {}", o.f32()[d]);
     }
 }
+
+// The fused SDPA primitive (Op::Sdpa) is the flash-kernel oracle: its forward AND backward
+// must match the dot+softmax decomposition (g.sdpa) bit-close, for both causal and full attn.
+#[test]
+fn sdpa_fused_matches_decomposition() {
+    let (b, h, s, dh) = (2usize, 3usize, 5usize, 4usize);
+    let n = b * h * s * dh;
+    let mk = |seed: f32| -> Vec<f32> { (0..n).map(|i| (i as f32 * seed).sin() * 0.5).collect() };
+    for causal in [false, true] {
+        let mut g = Graph::new();
+        let q = g.constant(mk(0.7), vec![b, h, s, dh]);
+        let k = g.constant(mk(1.3), vec![b, h, s, dh]);
+        let v = g.constant(mk(2.1), vec![b, h, s, dh]);
+        let fused = g.sdpa_fused(q, k, v, causal).unwrap();
+        let decomp = g.sdpa_decomposed(q, k, v, causal).unwrap(); // explicit dot+softmax reference
+        // forward: fused == decomposition
+        let of = interpret(&g, fused);
+        assert_eq!(of.shape, vec![b, h, s, dh]);
+        let od = interpret(&g, decomp).f32().to_vec();
+        for (i, (a, e)) in of.f32().iter().zip(&od).enumerate() {
+            assert!((a - e).abs() < 1e-5, "causal={causal} fwd[{i}] {a} vs {e}");
+        }
+        // backward: grad(sum(fused)) == grad(sum(decomposition)) w.r.t q, k, v
+        let gf = grad(&mut g, fused, &[q, k, v]).unwrap();
+        let gd = grad(&mut g, decomp, &[q, k, v]).unwrap();
+        for (w, (&nf, &nd)) in ["dq", "dk", "dv"].iter().zip(gf.iter().zip(&gd)) {
+            let (a, e) = (interpret(&g, nf).f32().to_vec(), interpret(&g, nd).f32().to_vec());
+            for (i, (x, y)) in a.iter().zip(&e).enumerate() {
+                assert!((x - y).abs() < 1e-4, "causal={causal} {w}[{i}] {x} vs {y}");
+            }
+        }
+    }
+
+    // finite-difference sanity on a tiny non-causal case: analytic dq vs central difference.
+    let (s2, dh2) = (3usize, 2usize);
+    let m = s2 * dh2;
+    let base: Vec<f32> = (0..3 * m).map(|i| (i as f32 * 0.37).cos() * 0.4).collect();
+    let (qb, kb, vb) = (base[..m].to_vec(), base[m..2 * m].to_vec(), base[2 * m..].to_vec());
+    let loss = |qd: &[f32]| -> f32 {
+        let mut g = Graph::new();
+        let q = g.constant(qd.to_vec(), vec![s2, dh2]);
+        let k = g.constant(kb.clone(), vec![s2, dh2]);
+        let v = g.constant(vb.clone(), vec![s2, dh2]);
+        let o = g.sdpa_fused(q, k, v, false).unwrap();
+        let r0 = g.sum(o, 1).unwrap();
+        let r1 = g.sum(r0, 0).unwrap();
+        interpret(&g, r1).f32()[0]
+    };
+    let mut g = Graph::new();
+    let q = g.constant(qb.clone(), vec![s2, dh2]);
+    let k = g.constant(kb.clone(), vec![s2, dh2]);
+    let v = g.constant(vb.clone(), vec![s2, dh2]);
+    let o = g.sdpa_fused(q, k, v, false).unwrap();
+    let dq = grad(&mut g, o, &[q]).unwrap()[0];
+    let dqa = interpret(&g, dq).f32().to_vec();
+    let eps = 1e-3;
+    for idx in 0..m {
+        let (mut qp, mut qm) = (qb.clone(), qb.clone());
+        qp[idx] += eps;
+        qm[idx] -= eps;
+        let fd = (loss(&qp) - loss(&qm)) / (2.0 * eps);
+        assert!((fd - dqa[idx]).abs() < 1e-2, "FD dq[{idx}] {fd} vs {}", dqa[idx]);
+    }
+}
+
+// diag_embed needs a trailing axis: a rank-0 (scalar) input is a clean error, not a panic.
+#[test]
+fn diag_embed_rank0_is_err() {
+    let mut g = Graph::new();
+    let s = g.constant(vec![5.0], vec![]);
+    assert!(g.diag_embed(s).is_err());
+}
+
+// quant_matmul validates bits/group_size/qweight/scales at record time; a bad value would
+// otherwise defer to an eval-time unreachable or a silent-wrong dequant.
+#[test]
+fn quant_matmul_guard() {
+    let mut g = Graph::new();
+    let act = g.constant(vec![0.0; 4], vec![1, 4]); // [M=1, K=4]
+    let qw = g.const_storage(Storage::U8(vec![0; 4]), vec![2, 2]); // [N=2, K*bits/8=2] for int4
+    let sc = g.constant(vec![0.0; 4], vec![2, 2]); // [N=2, K/group_size=2] -> 4 entries
+    // valid: int4, group_size 2, consistent qweight cols + scales count
+    assert!(g.quant_matmul(act, qw, sc, None, 4, 2).is_ok());
+    // bits not in {2,4,8}
+    assert!(g.quant_matmul(act, qw, sc, None, 3, 2).is_err());
+    // group_size 0, and a non-divisor of K=4
+    assert!(g.quant_matmul(act, qw, sc, None, 4, 0).is_err());
+    assert!(g.quant_matmul(act, qw, sc, None, 4, 3).is_err());
+    // qweight cols inconsistent with K*bits/8: int8 needs cols=4, qw has 2
+    assert!(g.quant_matmul(act, qw, sc, None, 8, 2).is_err());
+    // scales entry count mismatch (want N*K/group_size = 4)
+    let bad_sc = g.constant(vec![0.0; 2], vec![2, 1]);
+    assert!(g.quant_matmul(act, qw, bad_sc, None, 4, 2).is_err());
+}

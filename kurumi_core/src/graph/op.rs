@@ -52,6 +52,10 @@ pub enum Op {
     // RMSNorm over `axis`: x / sqrt(mean(x^2) + eps) (no centering, no learnable scale). Fused
     // like Softmax: one kernel vs the mul+sum+scale+add+sqrt+div chain; oracle decomposes.
     RmsNorm { axis: usize, eps: f32 },
+    // Fused scaled-dot-product attention over trailing [S, dh] (leading dims batch). q,k,v same
+    // shape; out = softmax((q@k^T)/sqrt(dh) [+causal -inf]) @ v. Fused like Softmax (one kernel
+    // vs the two-matmul+softmax chain); the oracle computes the decomposed math. src = [q, k, v].
+    Sdpa { causal: bool },
     // movement
     Reshape { shape: Vec<usize> },
     Permute { perm: Vec<usize> },

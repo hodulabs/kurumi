@@ -1,6 +1,6 @@
 //! Attention primitives (RoPE, scaled dot-product attention) as decompositions.
 
-use crate::{DType, Error, Graph, NodeId};
+use crate::{DType, Error, Graph, NodeId, Op};
 
 impl Graph {
     /// Rotary position embedding (NeoX/Llama) over `[.., S, D]` (D even, positions 0..S,
@@ -71,12 +71,29 @@ impl Graph {
     }
 
     /// Scaled dot-product attention over the trailing `[S, D]` (leading axes batch/heads).
-    /// `scores = q@k^T / sqrt(D)` (+ causal -inf bias on future keys), softmax over keys,
-    /// then `@v` -> `[.., S, D]`. Primitive composition: the two matmuls run on MPS,
-    /// autodiff free. The SxS scores materialize; a real long-seq win needs a tiled
-    /// simdgroup-matrix flash kernel (MFA) -- a naive per-row online-softmax kernel measured
-    /// slower than this (scalar ALU vs the matrix unit), so it's not it.
+    /// Auto-selects: the fast MPS dot+softmax decomposition by default; the fused `Op::Sdpa`
+    /// flash primitive (device online-softmax forward, no SxS materialization, + VJP backward)
+    /// ONLY when self-attention's `[..,S,S]` score buffer would be prohibitively large.
+    /// Cross-attention (S_q != S_k) always decomposes. Autodiff free either way.
     pub fn sdpa(&mut self, q: NodeId, k: NodeId, v: NodeId, causal: bool) -> Result<NodeId, Error> {
+        let (qs, ks, vs) = (self.shape(q), self.shape(k), self.shape(v));
+        let r = qs.len();
+        let (batch, s) = (qs[..r - 2].iter().product::<usize>(), qs[r - 2]);
+        let scores_bytes = batch * s * s * 4; // the [..,S,S] f32 buffer the decomposition materializes
+        // flash forward is memory-reduced but ~4x slower (scalar one-thread-per-query online
+        // softmax), so use it only when the SxS buffer would otherwise be too large; a fast
+        // flash would need a tiled simdgroup-matrix kernel.
+        if qs == ks && qs == vs && scores_bytes > (1 << 30) {
+            return self.sdpa_fused(q, k, v, causal); // huge SxS -> flash (fits, slower but runs)
+        }
+        self.sdpa_decomposed(q, k, v, causal) // normal S / cross-attn -> fast MPS decomposition
+    }
+
+    /// Explicit dot+softmax SDPA: `scores = q@k^T / sqrt(D)` (+ causal -inf bias on future
+    /// keys), softmax over keys, then `@v` -> `[.., S, D]`. Two matmuls on MPS, autodiff free.
+    /// The cross-attention path of [`Graph::sdpa`] and the fused primitive's correctness
+    /// reference (they match bit-close). Generic in S_q vs S_k (rectangular scores).
+    pub fn sdpa_decomposed(&mut self, q: NodeId, k: NodeId, v: NodeId, causal: bool) -> Result<NodeId, Error> {
         let qs = self.shape(q);
         let r = qs.len();
         let (s, dh) = (qs[r - 2], qs[r - 1]);
@@ -92,6 +109,25 @@ impl Graph {
         }
         let attn = self.softmax(scores, r - 1)?; // over keys (last axis)
         self.dot_general(attn, v, vec![r - 1], vec![r - 2], batch.clone(), batch)
+    }
+
+    /// Fused SDPA PRIMITIVE (`Op::Sdpa`): same math as [`sdpa`] but one op the interp oracle
+    /// computes directly (the decomposition above is its correctness reference; forward AND
+    /// backward match it bit-close). q,k,v must share shape `[..batch.., S, dh]` (dh>0);
+    /// out is q's shape. Interpreted by the CPU oracle + a hand-written VJP; the device
+    /// kernel is wired separately.
+    pub fn sdpa_fused(&mut self, q: NodeId, k: NodeId, v: NodeId, causal: bool) -> Result<NodeId, Error> {
+        let (qs, ks, vs) = (self.shape(q), self.shape(k), self.shape(v));
+        if qs != ks || qs != vs {
+            return Err(Error::shape("sdpa_fused", format!("q/k/v must share shape: {qs:?} {ks:?} {vs:?}")));
+        }
+        let r = qs.len();
+        if r < 2 || qs[r - 1] == 0 {
+            return Err(Error::shape("sdpa_fused", format!("need rank>=2 with dh>0, got {qs:?}")));
+        }
+        self.same_dtype("sdpa_fused", q, k)?;
+        self.same_dtype("sdpa_fused", q, v)?;
+        Ok(self.push(Op::Sdpa { causal }, vec![q, k, v]))
     }
 
     // additive causal bias broadcast to `out_shape` (trailing [S,S]): 0 where key j<=i,

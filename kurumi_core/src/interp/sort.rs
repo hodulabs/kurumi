@@ -10,10 +10,18 @@ pub(crate) fn argsort(tv: &TensorVal, axis: usize, descending: bool) -> TensorVa
         Storage::F64(v) => argsort_t(v, &tv.shape, axis, descending),
         Storage::F16(v) => argsort_t(v, &tv.shape, axis, descending),
         Storage::BF16(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::I8(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::I16(v) => argsort_t(v, &tv.shape, axis, descending),
         Storage::I32(v) => argsort_t(v, &tv.shape, axis, descending),
         Storage::I64(v) => argsort_t(v, &tv.shape, axis, descending),
-        Storage::U32(v) => argsort_t(v, &tv.shape, axis, descending),
         Storage::U8(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::U16(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::U32(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::U64(v) => argsort_t(v, &tv.shape, axis, descending),
+        // fp8 impl PartialOrd, so the generic kernel orders them directly.
+        Storage::F8E4M3(v) => argsort_t(v, &tv.shape, axis, descending),
+        Storage::F8E5M2(v) => argsort_t(v, &tv.shape, axis, descending),
+        // only BOOL/complex reach here; reduce_check already rejects them at build time.
         s => panic!("argsort on non-orderable dtype {:?}", s.dtype()),
     }
 }

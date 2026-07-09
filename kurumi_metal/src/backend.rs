@@ -120,6 +120,22 @@ impl Backend for MetalBackend {
         let v = self.eval_memo(g, id, feeds, &mut HashMap::new());
         self.to_host(&v)
     }
+
+    /// Evaluate several nodes in ONE shared pass: `recycle` the prior eval's buffers
+    /// once up front, then walk every id through a single `memo`, so a subgraph common
+    /// to the outputs (the forward trunk under many grads) computes once. Memoized
+    /// intermediate buffers stay in `inuse` (never recycled mid-pass), so reusing them
+    /// across outputs is safe. (No profiling branch here -- keep the shared path clean.)
+    fn eval_many_with(&self, g: &Graph, ids: &[NodeId], feeds: &Feeds) -> Vec<TensorVal> {
+        self.ctx.recycle(); // reclaim the prior eval's intermediate buffers, once
+        let mut memo = HashMap::new();
+        ids.iter()
+            .map(|&id| {
+                let v = self.eval_memo(g, id, feeds, &mut memo);
+                self.to_host(&v)
+            })
+            .collect()
+    }
 }
 
 impl MetalBackend {

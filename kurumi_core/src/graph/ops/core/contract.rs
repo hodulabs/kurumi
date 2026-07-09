@@ -56,9 +56,39 @@ impl Graph {
         bits: u8,
         group_size: usize,
     ) -> Result<NodeId, Error> {
-        let (ra, rq) = (self.shape(act).len(), self.shape(qweight).len());
+        let (sa, sq) = (self.shape(act), self.shape(qweight));
+        let (ra, rq) = (sa.len(), sq.len());
         if ra != 2 || rq != 2 {
             return Err(Error::shape("quant_matmul", format!("act rank {ra}, qweight rank {rq}: both must be rank-2")));
+        }
+        // Fail fast at record time: an out-of-range bits/group_size or a mis-sized
+        // qweight/scales otherwise defers to an eval-time unreachable or silent-wrong dequant.
+        let (k, n) = (sa[1], sq[0]); // K = act's contract dim, N = weight rows
+        if !matches!(bits, 2 | 4 | 8) {
+            return Err(Error::shape("quant_matmul", format!("bits {bits} must be 2, 4, or 8")));
+        }
+        if group_size == 0 || !k.is_multiple_of(group_size) {
+            return Err(Error::shape(
+                "quant_matmul",
+                format!("K {k} must be a nonzero multiple of group_size {group_size}"),
+            ));
+        }
+        // packed qweight stores 8/bits fields per byte, so it has K*bits/8 cols (no division: exact).
+        if sq[1] * 8 != k * bits as usize {
+            return Err(Error::shape(
+                "quant_matmul",
+                format!("qweight cols {} must equal K*bits/8 = {}*{}/8", sq[1], k, bits),
+            ));
+        }
+        // scales (and mins, when asymmetric) hold one entry per [N, K/group_size] group.
+        let want = n * (k / group_size);
+        if self.shape(scales).iter().product::<usize>() != want {
+            return Err(Error::shape("quant_matmul", format!("scales must have N*K/group_size = {want} entries")));
+        }
+        if let Some(m) = mins
+            && self.shape(m).iter().product::<usize>() != want
+        {
+            return Err(Error::shape("quant_matmul", format!("mins must have N*K/group_size = {want} entries")));
         }
         let symmetric = mins.is_none();
         let mut src = vec![act, qweight, scales];

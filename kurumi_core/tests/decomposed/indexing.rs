@@ -63,6 +63,34 @@ fn sort_topk_takealong() {
 }
 
 #[test]
+fn arg_ops_integer_dtype() {
+    // arg-ops must run on ordinary integer tensors, not just f32: the builder gates
+    // all 14 numeric dtypes, but the interp kernels used to panic on I16/U16/I8/...
+    let mut g = Graph::new();
+    let asi64 = |g: &Graph, y: NodeId| match interpret(g, y).storage {
+        Storage::I64(v) => v,
+        s => panic!("want i64, got {:?}", s.dtype()),
+    };
+    // [[1,5,2],[8,3,0]] as I16
+    let x = g.const_storage(Storage::I16(vec![1, 5, 2, 8, 3, 0]), vec![2, 3]);
+    // argmax/argmin over axis1
+    let (am, an) = (g.argmax(x, 1).unwrap(), g.argmin(x, 1).unwrap());
+    assert_eq!(asi64(&g, am), vec![1, 0]);
+    assert_eq!(asi64(&g, an), vec![0, 2]);
+    // argsort ascending over axis1: row0 [1,5,2]->[0,2,1], row1 [8,3,0]->[2,1,0]
+    let asc = g.argsort(x, 1, false).unwrap();
+    assert_eq!(asi64(&g, asc), vec![0, 2, 1, 2, 1, 0]);
+    // topk largest 2 over axis1: values keep the I16 dtype, indices are I64
+    let (tv, ti) = g.topk(x, 2, 1, true).unwrap();
+    let tvals = match interpret(&g, tv).storage {
+        Storage::I16(v) => v,
+        s => panic!("want i16, got {:?}", s.dtype()),
+    };
+    assert_eq!(tvals, vec![5, 2, 8, 3]);
+    assert_eq!(asi64(&g, ti), vec![1, 2, 0, 1]);
+}
+
+#[test]
 fn gather_along_backward() {
     // d/dx sum(take_along_dim(x, idx)) places 1 at gathered positions
     let mut g = Graph::new();
