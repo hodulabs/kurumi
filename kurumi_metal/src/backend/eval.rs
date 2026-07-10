@@ -19,4 +19,3 @@ mod reduce;
 pub(super) use crate::backend::fuse::{
     Ew, FExpr, FUSE_CAP, MAX_LEAVES, REDUCE_TG, Val, ew_kind, fused_reduce_msl, leaf_eq,
 };
-pub(super) use crate::backend::{combine_str, scatter_dev_ok, storage_i32};

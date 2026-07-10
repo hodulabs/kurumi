@@ -2,6 +2,7 @@
 //! FFT convolution, and the analytic (Hilbert) signal. All pure decompositions -> autodiff &
 //! every backend for free. Window functions are in `windows`, STFT/ISTFT in `stft`.
 
+mod fft;
 mod stft;
 mod windows;
 

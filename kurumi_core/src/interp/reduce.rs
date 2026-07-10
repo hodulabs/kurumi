@@ -1,7 +1,17 @@
 //! Reduction interp kernels: arg-reduce (argmax/argmin), the generic axis fold
 //! (`reduce_v`), and sum/prod with f32-promoted accumulation for low-precision floats.
 
-use crate::{ArgKind, DType, Elem, Num, Storage, TensorVal, cast, inc, row_major_strides};
+use crate::{ArgKind, DType, Elem, Num, Op, Storage, TensorVal, cast, inc, row_major_strides};
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Sum { axis } => reduce_sum(&inputs[0].storage, &inputs[0].shape, *axis),
+        Op::Prod { axis } => reduce_prod(&inputs[0].storage, &inputs[0].shape, *axis),
+        Op::ReduceMax { axis } => num_reduce!(&inputs[0].storage, &inputs[0].shape, *axis, Num::lowest, Num::max),
+        Op::ArgReduce { axis, kind } => arg_reduce(inputs[0], *axis, *kind),
+        _ => unreachable!("reduce::eval: non-reduce op"),
+    }
+}
 
 /// Index of the max/min along `axis` (keepdim=false), as I64 indices. Ties take
 /// the first (lowest index). Non-differentiable.

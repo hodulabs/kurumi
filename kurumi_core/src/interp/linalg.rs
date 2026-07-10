@@ -8,7 +8,65 @@ mod eigen;
 
 pub(crate) use eigen::{eigh, eigvals, qr};
 
-use crate::{DType, Elem, Storage};
+use crate::{DType, Elem, Op, Storage, TensorVal};
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Solve => {
+            let (a, b) = (inputs[0], inputs[1]);
+            let (ar, br) = (a.shape.len(), b.shape.len());
+            let n = a.shape[ar - 1];
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            let k = b.shape[br - 1];
+            TensorVal { shape: b.shape.clone(), storage: solve(&a.storage, &b.storage, batch, n, k) }
+        }
+        Op::Det => {
+            let a = inputs[0];
+            let ar = a.shape.len();
+            let n = a.shape[ar - 1];
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            TensorVal { shape: a.shape[..ar - 2].to_vec(), storage: det(&a.storage, batch, n) }
+        }
+        Op::Cholesky => {
+            let a = inputs[0];
+            let ar = a.shape.len();
+            let n = a.shape[ar - 1];
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            TensorVal { shape: a.shape.clone(), storage: cholesky(&a.storage, batch, n) }
+        }
+        Op::Eigh => {
+            let a = inputs[0];
+            let ar = a.shape.len();
+            let n = a.shape[ar - 1];
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            let mut shape = a.shape.clone();
+            *shape.last_mut().unwrap() += 1; // [.., N, N+1]
+            TensorVal { shape, storage: eigh(&a.storage, batch, n) }
+        }
+        Op::Qr { r_factor } => {
+            let a = inputs[0];
+            let ar = a.shape.len();
+            let (m, n) = (a.shape[ar - 2], a.shape[ar - 1]);
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            let k = m.min(n);
+            let mut shape = a.shape.clone();
+            if *r_factor {
+                shape[ar - 2] = k
+            } else {
+                shape[ar - 1] = k
+            }
+            TensorVal { shape, storage: qr(&a.storage, batch, m, n, *r_factor) }
+        }
+        Op::Eigvals => {
+            let a = inputs[0];
+            let ar = a.shape.len();
+            let n = a.shape[ar - 1];
+            let batch: usize = a.shape[..ar - 2].iter().product();
+            TensorVal { shape: a.shape[..ar - 1].to_vec(), storage: eigvals(&a.storage, batch, n) }
+        }
+        _ => unreachable!("linalg::eval: non-linalg op"),
+    }
+}
 
 // the float types linalg runs in (f32/f64 native). Only the ops LU/Cholesky/det need.
 pub(crate) trait LinFloat:

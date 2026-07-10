@@ -9,7 +9,7 @@ mod hostgemm;
 use crate::dtype::{dev_dtype, msl_ty};
 use crate::{Buffer, MetalContext, Pipeline};
 use fuse::{FExpr, Leaf, Val, View, fused_msl};
-use kurumi_core::{Backend, DType, Feeds, Graph, NodeId, Op, ScatterOp, Storage, TensorVal, eval_op};
+use kurumi_core::{Backend, DType, Feeds, Graph, NodeId, Op, Storage, TensorVal, eval_op};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -32,35 +32,6 @@ impl MetalBackend {
         let gemm_f32 = ctx.gemm_pipeline();
         let gemm_f16 = ctx.gemm_f16_pipeline();
         Some(Self { ctx, gemm_f32, gemm_f16, const_cache: RefCell::new(HashMap::new()) })
-    }
-}
-
-// which (combine, dtype) scatters run device-resident: Set for any device dtype
-// (direct write); Add/Max/Min for f32 (float-CAS) and i32/u32 (native int atomics).
-// f16/bf16/64-bit/small-int combine has no matching Metal atomic -> CPU oracle.
-fn scatter_dev_ok(c: ScatterOp, dt: DType) -> bool {
-    match c {
-        ScatterOp::Set => dev_dtype(dt),
-        _ => matches!(dt, DType::F32 | DType::I32 | DType::U32),
-    }
-}
-
-// scatter combine tag -> the kernel-body selector string.
-fn combine_str(c: ScatterOp) -> &'static str {
-    match c {
-        ScatterOp::Set => "set",
-        ScatterOp::Add => "add",
-        ScatterOp::Max => "max",
-        ScatterOp::Min => "min",
-    }
-}
-
-// gather indices (i32/i64) -> i32 for the GPU index buffer.
-fn storage_i32(s: &Storage) -> Vec<i32> {
-    match s {
-        Storage::I32(v) => v.clone(),
-        Storage::I64(v) => v.iter().map(|&x| x as i32).collect(),
-        _ => panic!("gather indices must be integer, got {:?}", s.dtype()),
     }
 }
 

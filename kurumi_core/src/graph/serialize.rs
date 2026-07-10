@@ -16,6 +16,13 @@ use crate::graph::{Graph, NodeId};
 const MAGIC: &[u8] = b"KGPH";
 const VERSION: u8 = 1;
 
+// The blob is little-endian everywhere: headers/attrs write LE explicitly, and Const payloads
+// go through `Storage::to_bytes`, which is native-endian -- equal to LE only on a little-endian
+// host. Every real target (x86/ARM/wasm) is LE; refuse to build on a big-endian host rather than
+// silently emit a blob other targets can't read (02-artifact-format: one artifact, every target).
+#[cfg(target_endian = "big")]
+compile_error!("kurumi graph serialization assumes a little-endian host (Const payload is native-endian)");
+
 /// Whether a serialized `Input` binds a stored weight (by name) or is fed by the caller.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum InputRole {

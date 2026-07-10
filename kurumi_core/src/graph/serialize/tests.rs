@@ -145,3 +145,31 @@ fn rejects_bad_magic() {
     assert!(deserialize_graph(b"XXXX\x01").is_err());
     assert!(deserialize_graph(&[]).is_err());
 }
+
+// A structurally valid blob whose only node's src references itself (id 0, not yet built) must
+// be a clean error, not an index-OOB panic in inference. (Hand-forged bytes: MAGIC + VERSION,
+// then one Add node with src [0].)
+#[test]
+fn rejects_forward_src_ref() {
+    let mut b = b"KGPH\x01".to_vec();
+    b.extend_from_slice(&1u32.to_le_bytes()); // n = 1 node
+    b.push(7); // Op::Add (no attrs)
+    b.extend_from_slice(&1u32.to_le_bytes()); // 1 src
+    b.extend_from_slice(&0u32.to_le_bytes()); // src = node 0 (itself / forward)
+    assert!(deserialize_graph(&b).is_err(), "a self/forward src ref must be a clean error");
+}
+
+// A Const whose payload holds fewer elements than its declared shape (here 1 f32 for shape [2])
+// must be a clean error, not a short storage that OOBs downstream.
+#[test]
+fn rejects_const_payload_underfill() {
+    let mut b = b"KGPH\x01".to_vec();
+    b.extend_from_slice(&1u32.to_le_bytes()); // n = 1 node
+    b.push(0); // Op::Const
+    b.push(13); // storage dtype = F32
+    b.extend_from_slice(&4u64.to_le_bytes()); // nbytes = 4 (one f32)
+    b.extend_from_slice(&1.0f32.to_le_bytes()); // payload: one f32
+    b.extend_from_slice(&1u32.to_le_bytes()); // shape rank = 1
+    b.extend_from_slice(&2u64.to_le_bytes()); // shape = [2] -> needs 2 elems, got 1
+    assert!(deserialize_graph(&b).is_err(), "a Const underfilling its shape must be a clean error");
+}

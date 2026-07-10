@@ -5,9 +5,11 @@ use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Error, Storage};
 
 /// Rebuild a graph from a blob by replaying `push` in id order (shape/dtype re-inferred).
-/// This is a trust boundary: a corrupt length/tag is a clean error, never a panic. A blob
-/// that is structurally valid but semantically bogus (a src referencing a later node) can
-/// still panic in inference -- that is the same contract the builder has for live graphs.
+/// This is a trust boundary: a corrupt length/tag, or a src that references a not-yet-built
+/// node, is a clean error -- never a panic. A structurally valid blob with semantically bogus
+/// attrs (a Reshape whose product != input, an axis past rank) can still panic in inference,
+/// the same contract the builder has for live graphs; the C ABI wraps this in a panic guard
+/// (`ku_graph_deserialize`), so the FFI boundary never aborts on such a blob.
 pub fn deserialize_graph(bytes: &[u8]) -> Result<Runnable, Error> {
     let mut r = Reader::new(bytes);
     if r.take(4)? != MAGIC {
@@ -19,12 +21,20 @@ pub fn deserialize_graph(bytes: &[u8]) -> Result<Runnable, Error> {
     }
     let n = r.u32()? as usize;
     let mut g = Graph::new();
-    for _ in 0..n {
+    for i in 0..n {
         let op = read_op(&mut r)?;
         let sl = r.u32()? as usize;
         let mut src = Vec::new();
         for _ in 0..sl {
-            src.push(r.node_id()?);
+            let s = r.node_id()?;
+            // replay pushes nodes in id order, so node `i`'s sources must already exist (id < i).
+            // a forward/dangling ref would index-OOB in shape/dtype inference -- reject it here so
+            // the whole class is a clean error, not a panic. (`Vec::new`, not `with_capacity(sl)`:
+            // `sl` is attacker-controlled, and the reader bounds growth to real bytes.)
+            if s.0 as usize >= i {
+                return Err(err(format!("node {i} references source {} (not yet built)", s.0)));
+            }
+            src.push(s);
         }
         g.push(op, src);
     }
@@ -47,7 +57,18 @@ pub fn deserialize_graph(bytes: &[u8]) -> Result<Runnable, Error> {
 pub(super) fn read_op(r: &mut Reader) -> Result<Op, Error> {
     let tag = r.u8()?;
     Ok(match tag {
-        0 => Op::Const { data: r.storage()?, shape: r.vec_usize()? },
+        0 => {
+            // `storage()` reads `nbytes` bytes and `from_bytes` drops a trailing partial element
+            // (chunks_exact), so a corrupt Const can yield a storage shorter than its shape --
+            // downstream OOB. Reject any payload whose element count != the declared shape.
+            let data = r.storage()?;
+            let shape = r.vec_usize()?;
+            let want: usize = shape.iter().product();
+            if data.len() != want {
+                return Err(err(format!("Const payload has {} elements, shape {shape:?} needs {want}", data.len())));
+            }
+            Op::Const { data, shape }
+        }
         1 => Op::Input { shape: r.vec_usize()?, dtype: r.dtype()? },
         2 => Op::Iota { shape: r.vec_usize()?, axis: r.usize()?, dtype: r.dtype()? },
         3 => Op::RandUniform { shape: r.vec_usize()? },

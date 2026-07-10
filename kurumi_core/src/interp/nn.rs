@@ -1,7 +1,16 @@
 //! Interp oracles for fused nn primitives. The CPU reference a backend's fused kernel is
 //! checked against; each computes the decomposed math directly.
 
-use crate::{DType, Storage, TensorVal, cast, inc, row_major_strides};
+use crate::{DType, Op, Storage, TensorVal, cast, inc, row_major_strides};
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Softmax { axis } => softmax_v(&inputs[0].storage, &inputs[0].shape, *axis),
+        Op::RmsNorm { axis, eps } => rmsnorm_v(&inputs[0].storage, &inputs[0].shape, *axis, *eps),
+        Op::Sdpa { causal } => sdpa_v(inputs[0], inputs[1], inputs[2], *causal),
+        _ => unreachable!("nn::eval: non-nn op"),
+    }
+}
 
 // stable softmax over `axis` (shape-preserving): exp(x - rowmax) / rowsum. low-precision
 // floats (f16/bf16) promote to f32 for the exp/sum then round back, matching the reduce path

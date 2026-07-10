@@ -1,6 +1,9 @@
 //! Device f32 dense linalg: solve / determinant / Cholesky (one thread per batch
 //! matrix). f64 has no Metal double path -> host oracle.
 
+// NOTE: eigen is not sub-split into its own file here (unlike `msl/linalg/eigen.rs` and
+// `context/dispatch/linalg/eigen.rs`); the whole device dense-linalg family stays in this file.
+
 use crate::MetalBackend;
 use crate::backend::eval::Val;
 use kurumi_core::{DType, Feeds, Graph, Node, NodeId, Op};

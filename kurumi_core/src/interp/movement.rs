@@ -2,7 +2,37 @@
 //! `Copy` element. Each walks the output coordinate odometer, mapping it back to a source flat
 //! index. (The realize path fuses these as views; here they materialize, as the oracle.)
 
-use crate::{inc, row_major_strides};
+use crate::{Op, Storage, TensorVal, inc, row_major_strides};
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Reshape { shape } => TensorVal { shape: shape.clone(), storage: inputs[0].storage.clone() },
+        Op::Permute { perm } => {
+            let a = inputs[0];
+            let out: Vec<usize> = perm.iter().map(|&p| a.shape[p]).collect();
+            TensorVal { shape: out, storage: dispatch!(&a.storage, |v| permute_k(v, &a.shape, perm)) }
+        }
+        Op::Expand { shape } => {
+            let a = inputs[0];
+            TensorVal { shape: shape.clone(), storage: dispatch!(&a.storage, |v| expand_k(v, &a.shape, shape)) }
+        }
+        Op::Slice { ranges } => {
+            let a = inputs[0];
+            let out: Vec<usize> = ranges.iter().map(|&(s, e, st)| (e - s).div_ceil(st)).collect();
+            TensorVal { shape: out, storage: dispatch!(&a.storage, |v| slice_k(v, &a.shape, ranges)) }
+        }
+        Op::Flip { axes } => {
+            let a = inputs[0];
+            TensorVal { shape: a.shape.clone(), storage: dispatch!(&a.storage, |v| flip_k(v, &a.shape, axes)) }
+        }
+        Op::Pad { pads } => {
+            let a = inputs[0];
+            let out: Vec<usize> = pads.iter().zip(&a.shape).map(|(&(lo, hi), &s)| lo + s + hi).collect();
+            TensorVal { shape: out, storage: dispatch!(&a.storage, |v| pad_k(v, &a.shape, pads)) }
+        }
+        _ => unreachable!("movement::eval: non-movement op"),
+    }
+}
 
 pub(crate) fn permute_k<T: Copy>(data: &[T], in_shape: &[usize], perm: &[usize]) -> Vec<T> {
     let out_shape: Vec<usize> = perm.iter().map(|&p| in_shape[p]).collect();

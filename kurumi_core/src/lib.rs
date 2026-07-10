@@ -17,7 +17,7 @@ mod graph;
 mod interp;
 mod layout;
 
-pub use backend::{Backend, CpuBackend};
+pub use backend::{Backend, CpuBackend, Feeds};
 pub(crate) use dtype::{Bitwise, Elem, Float, Int, Num, Signed, bitcast, cast, iota_storage};
 pub use dtype::{DType, Storage, TensorVal};
 pub use error::Error;
@@ -26,8 +26,8 @@ pub use graph::{
     ArgKind, Graph, InputBinding, InputRole, Node, NodeId, Op, Runnable, ScatterOp, amp, deserialize_graph, dump,
     node_count, reachable, serialize_graph, serialize_reachable, simplify,
 };
-pub use interp::{Feeds, eval_op, interpret, interpret_many, interpret_with};
 pub(crate) use interp::{dot_dispatch, dot_general, reduce_v};
+pub use interp::{eval_op, interpret, interpret_many, interpret_with};
 pub use layout::row_major_strides;
 pub(crate) use layout::{free_axes, inc};
 pub use quant::{Quantized, dequant_matmul, dequantize, quantize};

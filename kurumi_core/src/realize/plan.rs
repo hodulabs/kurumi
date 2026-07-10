@@ -3,7 +3,7 @@
 //! loop, weights never re-copied and the output buffer reused. Replay drives the same
 //! scheduler (`go`) as one-shot `realize`.
 
-use crate::realize::{Sched, consumer_counts, go, op_fused};
+use crate::realize::{Sched, consumer_counts, fused_supported, go};
 use crate::{Feeds, Graph, NodeId, Op, TensorVal};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -19,7 +19,7 @@ pub struct Plan {
 
 impl Plan {
     pub fn compile(g: &Graph, id: NodeId) -> Option<Plan> {
-        if !plan_supported(g, id) {
+        if !fused_supported(g, id, true) {
             return None;
         }
         // materialize every reachable const leaf exactly once (the whole point).
@@ -55,21 +55,4 @@ impl Plan {
     pub fn shape(&self) -> &[usize] {
         &self.shape
     }
-}
-
-// like `realize_supported`, but an f32 Input is a valid leaf (fed at run time).
-fn plan_supported(g: &Graph, id: NodeId) -> bool {
-    let mut seen = HashSet::new();
-    let mut stack = vec![id];
-    while let Some(n) = stack.pop() {
-        if !seen.insert(n) {
-            continue;
-        }
-        let node = g.node(n);
-        if g.dtype(n) != crate::DType::F32 || !(op_fused(&node.op) || matches!(node.op, Op::Input { .. })) {
-            return false;
-        }
-        stack.extend_from_slice(&node.src);
-    }
-    true
 }

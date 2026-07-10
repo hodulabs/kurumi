@@ -4,7 +4,12 @@
 //! back to the CPU oracle (`eval_op`) for the rest: every op runs on every
 //! backend, acceleration grows without breaking completeness.
 
-use crate::{DType, Error, Feeds, Graph, NodeId, Storage, TensorVal, dot_dispatch};
+use crate::{DType, Error, Graph, NodeId, Storage, TensorVal, dot_dispatch};
+use std::collections::HashMap;
+
+/// Values supplied for `Op::Input` nodes at eval time (params/data), keyed by node: the
+/// eval-time input map every [`Backend::eval_with`] consumes (weights + data fed per step).
+pub type Feeds = HashMap<NodeId, TensorVal>;
 
 pub trait Backend {
     fn name(&self) -> &str;

@@ -1,10 +1,11 @@
 //! Encoding half of the graph IR codec: serialize_graph / serialize_reachable, the
 //! reachable-cone prune + dense remap, and write_op (the exhaustive encode match every new
 //! Op must extend).
+use crate::graph::inspect::reachable_multi;
 use crate::graph::serialize::{InputBinding, InputRole, MAGIC, VERSION};
 use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Storage};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Serialize a graph and its output/input bindings into a self-contained blob. The whole
 /// node arena is written in id order (id-preserving). See [`serialize_reachable`] to write
@@ -35,30 +36,6 @@ pub fn serialize_reachable(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding
     let ins: Vec<(u32, InputRole, &str)> =
         inputs.iter().filter_map(|b| remap.get(&b.node).map(|&id| (id, b.role, b.name.as_str()))).collect();
     write_blob(&nodes, &outs, &ins)
-}
-
-// nodes reachable from any of `roots`, topologically ordered (each after its sources). one
-// shared seen set across roots so the order is a valid dense-replay sequence.
-fn reachable_multi(g: &Graph, roots: &[NodeId]) -> Vec<NodeId> {
-    let mut order = Vec::new();
-    let mut seen = HashSet::new();
-    let mut stack: Vec<(NodeId, bool)> = roots.iter().rev().map(|&r| (r, false)).collect();
-    while let Some((id, expanded)) = stack.pop() {
-        if expanded {
-            order.push(id);
-            continue;
-        }
-        if !seen.insert(id) {
-            continue;
-        }
-        stack.push((id, true));
-        for &s in &g.node(id).src {
-            if !seen.contains(&s) {
-                stack.push((s, false));
-            }
-        }
-    }
-    order
 }
 
 // shared blob encoder: nodes already in dense id order, src as new-id u32s.

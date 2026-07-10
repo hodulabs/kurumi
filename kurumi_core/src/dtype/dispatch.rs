@@ -106,7 +106,7 @@ macro_rules! cmp_binary {
     };
 }
 // same-dtype pair over ALL dtypes (for `where`); $body is generic over T
-macro_rules! dispatch_pair {
+macro_rules! any_binary {
     ($a:expr, $b:expr, |$x:ident, $y:ident| $body:expr) => {
         pair_variants!(
             $a,

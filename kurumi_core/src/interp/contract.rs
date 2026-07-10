@@ -4,9 +4,22 @@
 
 mod gemm;
 
-use crate::{DType, Num, Storage, TensorVal, cast, free_axes, inc, row_major_strides};
+use crate::{DType, Num, Op, Storage, TensorVal, cast, free_axes, inc, row_major_strides};
 
 pub(crate) use gemm::dot_general;
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::DotGeneral { lhs_contract, rhs_contract, lhs_batch, rhs_batch } => {
+            dot_dispatch(inputs[0], inputs[1], lhs_contract, rhs_contract, lhs_batch, rhs_batch)
+        }
+        Op::QuantMatmul { bits, group_size, symmetric } => {
+            let mins = (!*symmetric).then(|| inputs[3]);
+            quant_matmul(inputs[0], inputs[1], inputs[2], mins, *bits, *group_size)
+        }
+        _ => unreachable!("contract::eval: non-contract op"),
+    }
+}
 
 // dispatch a contraction by dtype: f32 takes the gemm fast path, every other
 // numeric dtype uses the generic loop. (Operands share dtype, validated upstream.)

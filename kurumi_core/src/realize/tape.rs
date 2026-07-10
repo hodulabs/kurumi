@@ -8,7 +8,7 @@ mod kernels;
 mod run;
 
 use crate::lower::index::{self, Guard};
-use crate::realize::repr::{BinOp, Expr, UnOp};
+use crate::realize::expr::{BinOp, Expr, UnOp};
 use std::rc::Rc;
 
 fn eval_expr(e: &Expr, coord: &[usize]) -> f32 {

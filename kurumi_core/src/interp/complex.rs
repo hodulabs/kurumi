@@ -1,8 +1,20 @@
 //! Complex construction / part-extraction kernels for the interpreter.
 //! (C64 = Complex<f32>, C128 = Complex<f64>.)
 
-use crate::Storage;
+use crate::{Op, Storage, TensorVal};
 use num_complex::Complex;
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Complex => {
+            let storage = complex_k(&inputs[0].storage, &inputs[1].storage);
+            TensorVal { shape: inputs[0].shape.clone(), storage }
+        }
+        Op::Real => TensorVal { shape: inputs[0].shape.clone(), storage: real_k(&inputs[0].storage) },
+        Op::Imag => TensorVal { shape: inputs[0].shape.clone(), storage: imag_k(&inputs[0].storage) },
+        _ => unreachable!("complex::eval: non-complex op"),
+    }
+}
 
 // combine real + imaginary parts into a complex storage
 pub(crate) fn complex_k(re: &Storage, im: &Storage) -> Storage {

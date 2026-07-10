@@ -17,7 +17,7 @@ pub(crate) mod indexing;
 pub(crate) mod linalg;
 pub(crate) mod movement;
 pub(crate) mod nn;
-pub(crate) mod rng;
+pub(crate) mod random;
 pub(crate) mod signal;
 pub(crate) mod spatial;
 pub(crate) mod stats;

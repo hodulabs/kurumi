@@ -1,6 +1,8 @@
 //! Contraction: the `dot_general` primitive and `quant_matmul`. matmul/bmm all lower to
-//! dot_general in the frontend; `einsum` (which also lowers to dot_general) is in `einsum.rs`;
-//! the interpreter side is `interp/contract.rs`.
+//! dot_general in the frontend; `einsum` (which also lowers to dot_general) is the `einsum`
+//! submodule; the interpreter side is `interp/contract.rs`.
+
+mod einsum;
 
 use crate::layout::check_axes;
 use crate::{Error, Graph, NodeId, Op};

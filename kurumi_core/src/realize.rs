@@ -3,19 +3,19 @@
 //! output coordinate. Materializes only at a boundary (reduce, contraction, output,
 //! movement on a fused result, multi-consumer node), so a movement+elementwise subtree
 //! runs in ONE pass and a shared node computes once. Checked against `interpret`.
-//! Submodules: repr (types), tape (executor), plan (compile-once replay).
+//! Submodules: expr (types), tape (executor), plan (compile-once replay).
 //! This file is the scheduler: graph -> `Realized` nodes plus the one-shot eval entries.
 
+mod expr;
 mod plan;
-mod repr;
 mod tape;
 
+pub use expr::Realized;
 pub use plan::Plan;
-pub use repr::Realized;
 
 use crate::lower::index::{self, View};
 use crate::{Feeds, Graph, NodeId, Op, TensorVal, dot_general, reduce_v};
-use repr::{Expr, Repr, UnOp};
+use expr::{Expr, Repr, UnOp};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -35,14 +35,14 @@ pub fn force(g: &Graph, id: NodeId) -> TensorVal {
     // fused executor is f32-only (ML hot path). Other dtypes fall back to the interpreter
     // oracle: correct, and f16/bf16 have no CPU perf win anyway (perf is on Metal).
     // Genericize over float dtype when Metal needs it.
-    if realize_supported(g, id) { realize(g, id).force() } else { crate::interpret(g, id) }
+    if fused_supported(g, id, false) { realize(g, id).force() } else { crate::interpret(g, id) }
 }
 
 /// Realize `id` into a reused output buffer (eval-loop / replay path: no per-call output
 /// alloc, so a memory-bound op runs at streaming bandwidth, no page faults on a fresh
 /// buffer). Returns the row-major shape.
 pub fn force_into(g: &Graph, id: NodeId, out: &mut Vec<f32>) -> Vec<usize> {
-    if !realize_supported(g, id) {
+    if !fused_supported(g, id, false) {
         let tv = crate::interpret(g, id);
         out.clear();
         out.extend_from_slice(&tv.storage.into_f32());
@@ -59,7 +59,7 @@ pub fn force_into(g: &Graph, id: NodeId, out: &mut Vec<f32>) -> Vec<usize> {
 /// count 1; a view-only movement chain adds 0. `None` means the graph left the f32 fused
 /// path (an op the executor doesn't lower, e.g. Detach/Where/Cast-to-int) -> interpret.
 pub fn force_counted(g: &Graph, id: NodeId) -> (TensorVal, Option<usize>) {
-    if !realize_supported(g, id) {
+    if !fused_supported(g, id, false) {
         return (crate::interpret(g, id), None);
     }
     KERNELS.with(|k| k.set(0));
@@ -69,17 +69,21 @@ pub fn force_counted(g: &Graph, id: NodeId) -> (TensorVal, Option<usize>) {
 
 // fused path runs only when every reachable node is f32 AND uses an op the executor
 // lowers; anything else (other dtypes, ops like where/cmp/iota) falls back to interpret.
-fn realize_supported(g: &Graph, id: NodeId) -> bool {
+// `allow_input` lets a compiled `Plan` treat an f32 Input as a valid leaf (fed at run time);
+// one-shot `force` does not (no feeds).
+pub(super) fn fused_supported(g: &Graph, id: NodeId, allow_input: bool) -> bool {
     let mut seen = HashSet::new();
     let mut stack = vec![id];
     while let Some(n) = stack.pop() {
         if !seen.insert(n) {
             continue;
         }
-        if g.dtype(n) != crate::DType::F32 || !op_fused(&g.node(n).op) {
+        let node = g.node(n);
+        let op_ok = op_fused(&node.op) || (allow_input && matches!(node.op, Op::Input { .. }));
+        if g.dtype(n) != crate::DType::F32 || !op_ok {
             return false;
         }
-        stack.extend_from_slice(&g.node(n).src);
+        stack.extend_from_slice(&node.src);
     }
     true
 }

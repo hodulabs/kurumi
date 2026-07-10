@@ -8,10 +8,18 @@ use std::fmt::Write;
 
 /// Nodes reachable from `root` in topological order (each node after its sources).
 pub fn reachable(g: &Graph, root: NodeId) -> Vec<NodeId> {
+    reachable_multi(g, &[root])
+}
+
+/// Nodes reachable from ANY of `roots`, in one topological order (each after its sources),
+/// with a single shared seen-set so the result is a valid dense-replay sequence -- the walk
+/// `serialize_reachable` prunes a multi-output graph with.
+pub fn reachable_multi(g: &Graph, roots: &[NodeId]) -> Vec<NodeId> {
     let mut order = Vec::new();
     let mut seen = HashSet::new();
-    // iterative post-order: push (id, expanded); on the second visit, emit.
-    let mut stack = vec![(root, false)];
+    // iterative post-order: push (id, expanded); on the second visit, emit. roots reversed so
+    // the first root is expanded first (matches a plain left-to-right DFS).
+    let mut stack: Vec<(NodeId, bool)> = roots.iter().rev().map(|&r| (r, false)).collect();
     while let Some((id, expanded)) = stack.pop() {
         if expanded {
             order.push(id);

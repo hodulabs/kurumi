@@ -2,7 +2,7 @@
 //! vectorizes; transcendentals stay scalar libm (same as the oracle), so every result is
 //! bit-identical. `apply_*_from` handle the pointer operands the executor threads through.
 
-use crate::realize::repr::{BinOp, UnOp};
+use crate::realize::expr::{BinOp, UnOp};
 
 // monomorphic per-op loops: the match is hoisted out so each arm vectorizes. Arithmetic
 // ops auto-vectorize; transcendentals stay scalar libm (same as the oracle), so every

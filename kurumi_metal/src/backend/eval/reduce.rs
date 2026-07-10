@@ -1,6 +1,9 @@
 //! Device index-producing reductions: argmax/argmin (`ArgReduce`) and argsort, both
 //! gated on the *operand* dtype (their output is an I64 index buffer, not a float).
 
+// NOTE: value reductions (sum/max/prod, `Ew::Reduce`) live in `eval/fused.rs`; this file is
+// the arg/sort index reductions only.
+
 use crate::MetalBackend;
 use crate::backend::eval::Val;
 use crate::dtype::dev_dtype;

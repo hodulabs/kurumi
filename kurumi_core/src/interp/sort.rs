@@ -1,6 +1,13 @@
 //! Argsort kernel: per-line stable sort of indices along an axis (backs sort/topk).
 
-use crate::{Storage, TensorVal, inc, row_major_strides};
+use crate::{Op, Storage, TensorVal, inc, row_major_strides};
+
+pub(super) fn eval(op: &Op, inputs: &[&TensorVal]) -> TensorVal {
+    match op {
+        Op::Argsort { axis, descending } => argsort(inputs[0], *axis, *descending),
+        _ => unreachable!("sort::eval: non-sort op"),
+    }
+}
 
 /// Indices (I64) that sort `data` along `axis` (stable, ascending or descending).
 /// Output has the same shape as the input (a per-line permutation).

@@ -2,18 +2,16 @@
 //! Primitives (push one `Op`) and their decompositions live together per kind.
 
 mod bitwise;
+mod bounded;
 mod compare;
 mod complex;
 mod contract;
 mod distance;
-mod einsum;
 mod elementwise;
 mod explog;
-mod fft;
 mod indexing;
 mod join;
 mod linalg;
-mod masked;
 mod movement;
 mod random;
 mod reduce;

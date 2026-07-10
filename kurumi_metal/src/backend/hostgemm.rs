@@ -2,6 +2,9 @@
 //! (f32/f16 via simdgroup_matrix, bf16/int via the naive kernel), used by the CPU-
 //! fallback branch of `eval` (`host_op`). Device-resident GEMM is `mps_matmul_dev`.
 
+// NOTE: this sits beside `eval/`, not inside it, because it is a CPU-fallback `Backend`
+// helper (a storage-level matmul), not a graph-node evaluator like the `eval/*` families.
+
 use crate::backend::MetalBackend;
 use crate::msl::hostgemm::naive_mm_msl;
 use crate::{MetalContext, Pipeline};
