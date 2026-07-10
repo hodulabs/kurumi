@@ -40,10 +40,14 @@ pub(crate) fn dot_dispatch(
         | (Storage::BF16(_), Storage::BF16(_))
         | (Storage::F8E4M3(_), Storage::F8E4M3(_))
         | (Storage::F8E5M2(_), Storage::F8E5M2(_)) => dot_promoted(a, b, lc, rc, lb, rb),
+        (Storage::I8(x), Storage::I8(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
+        (Storage::I16(x), Storage::I16(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         (Storage::I32(x), Storage::I32(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         (Storage::I64(x), Storage::I64(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
-        (Storage::U32(x), Storage::U32(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         (Storage::U8(x), Storage::U8(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
+        (Storage::U16(x), Storage::U16(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
+        (Storage::U32(x), Storage::U32(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
+        (Storage::U64(x), Storage::U64(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         (Storage::C64(x), Storage::C64(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         (Storage::C128(x), Storage::C128(y)) => dot_num(x, &a.shape, y, &b.shape, lc, rc, lb, rb),
         _ => unreachable!("dot_general: non-numeric or mismatched dtype"),

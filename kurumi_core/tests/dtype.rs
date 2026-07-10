@@ -121,6 +121,30 @@ fn bf16_dot_general() {
 }
 
 #[test]
+fn integer_dot_general_all_dtypes() {
+    // [1,2;3,4] @ identity = itself, for every integer dtype. The interp dispatch used to wire
+    // only I32/I64/U32/U8, so a valid I8/I16/U16/U64 matmul panicked at eval.
+    macro_rules! check {
+        ($variant:ident, $ty:ty) => {{
+            let mut g = Graph::new();
+            let a = g.const_storage(Storage::$variant(vec![1 as $ty, 2, 3, 4]), vec![2, 2]);
+            let id = g.const_storage(Storage::$variant(vec![1 as $ty, 0, 0, 1]), vec![2, 2]);
+            let y = g.dot_general(a, id, vec![1], vec![0], vec![], vec![]).unwrap();
+            let Storage::$variant(v) = interpret(&g, y).storage else { panic!("want {}", stringify!($variant)) };
+            assert_eq!(v, vec![1 as $ty, 2, 3, 4], "{} dot_general", stringify!($variant));
+        }};
+    }
+    check!(I8, i8);
+    check!(I16, i16);
+    check!(I32, i32);
+    check!(I64, i64);
+    check!(U8, u8);
+    check!(U16, u16);
+    check!(U32, u32);
+    check!(U64, u64);
+}
+
+#[test]
 fn realize_falls_back_for_non_f32() {
     // an i32 graph: force() must route to the interpreter oracle and be correct
     let mut g = Graph::new();

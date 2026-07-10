@@ -140,6 +140,41 @@ fn reachable_prunes_dead_nodes() {
     assert_eq!(got.f32().to_vec(), vec![12.0, 21.0]);
 }
 
+const GOLDEN_V1: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/graph_v1.kgph");
+
+// a fixed all-const graph whose serialized bytes are frozen as the v1 wire-format baseline.
+fn golden_graph() -> (Graph, Vec<NodeId>, Vec<InputBinding>) {
+    let mut g = Graph::new();
+    let x = g.constant(vec![1., 2., 3., 4., 5., 6.], vec![2, 3]);
+    let w = g.constant(vec![2.0; 6], vec![2, 3]);
+    let a = g.push(Op::Add, vec![x, w]);
+    let out = g.push(Op::Sum { axis: 1 }, vec![a]);
+    (g, vec![out], vec![])
+}
+
+// dev tool (run with --ignored): (re)generate the committed v1 golden blob after an
+// intentional wire-format change.
+#[test]
+#[ignore = "regenerates the committed v1 golden blob"]
+fn gen_golden_blob() {
+    let (g, outs, ins) = golden_graph();
+    let blob = serialize_graph(&g, &outs, &ins);
+    std::fs::create_dir_all(std::path::Path::new(GOLDEN_V1).parent().unwrap()).unwrap();
+    std::fs::write(GOLDEN_V1, blob).unwrap();
+}
+
+// the v1 wire format is frozen: re-serializing the fixed graph must reproduce the committed
+// bytes (catches an accidental encoder change that a round-trip alone would miss), and the
+// committed bytes still decode and compute the known value.
+#[test]
+fn golden_blob_is_stable() {
+    let golden = std::fs::read(GOLDEN_V1).expect("run `cargo test gen_golden_blob -- --ignored` first");
+    let (g, outs, ins) = golden_graph();
+    assert_eq!(serialize_graph(&g, &outs, &ins), golden, "v1 graph wire format changed; regenerate if intentional");
+    let r = deserialize_graph(&golden).unwrap();
+    assert_eq!(interpret_with(&r.graph, r.outputs[0], &Feeds::new()).f32(), &[12.0, 21.0]);
+}
+
 #[test]
 fn rejects_bad_magic() {
     assert!(deserialize_graph(b"XXXX\x01").is_err());

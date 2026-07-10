@@ -32,6 +32,19 @@ fn grad_check(inputs: &[(Vec<f32>, Vec<usize>)], build: impl Fn(&mut Graph, &[No
 }
 
 #[test]
+fn second_order_grad() {
+    // grad-of-grad smoke test: f = sum(x^2) -> df/dx = 2x -> d/dx sum(2x) = 2 everywhere.
+    // grad differentiates sum(output), so the second pass exercises backward-of-backward.
+    let mut g = Graph::new();
+    let x = g.constant(vec![1.0, -2.0, 3.0], vec![3]);
+    let sq = g.mul(x, x).unwrap();
+    let g1 = grad(&mut g, sq, &[x]).unwrap()[0];
+    assert_eq!(interpret(&g, g1).f32(), &[2.0, -4.0, 6.0], "df/dx = 2x");
+    let g2 = grad(&mut g, g1, &[x]).unwrap()[0];
+    assert_eq!(interpret(&g, g2).f32(), &[2.0, 2.0, 2.0], "d/dx sum(2x) = 2");
+}
+
+#[test]
 fn grad_mul_add() {
     grad_check(&[(vec![1., -2., 3., 0.5], vec![2, 2]), (vec![4., 5., -1., 2.], vec![2, 2])], |g, x| {
         let m = g.mul(x[0], x[1]).unwrap();
