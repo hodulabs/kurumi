@@ -2,13 +2,13 @@
 //! Bitwise/Float). Trait defs + the `Elem` impls live here; the per-type-class impls are in
 //! the submodules (`int`/`float`/`complex`). Adding a dtype = adding one type to these impls.
 
-use crate::{DType, Storage};
-use float8::{F8E4M3, F8E5M2};
-use half::{bf16, f16};
-
 mod complex;
 mod float;
 mod int;
+
+use crate::{DType, Storage};
+use float8::{F8E4M3, F8E5M2};
+use half::{bf16, f16};
 
 /// Every storable element: typed access + f64 round-trip (for cast).
 pub trait Elem: Copy + Default + 'static {

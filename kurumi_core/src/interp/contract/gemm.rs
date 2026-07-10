@@ -2,7 +2,7 @@
 //! Accelerate cblas_sgemm on macOS / the `gemm` crate elsewhere. Every other shape/dtype
 //! falls back to the generic loop (`dot_num`) in the parent `contract`.
 
-use super::dot_num;
+use crate::interp::contract::dot_num;
 use crate::{Storage, TensorVal, row_major_strides};
 
 pub(crate) fn dot_general(

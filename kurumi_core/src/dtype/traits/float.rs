@@ -1,7 +1,7 @@
 //! Float element impls: Num, Signed, and Float transcendentals for f32/f64/f16/bf16/FP8.
 //! f16/bf16/FP8 upcast to f32, compute, round back. Trait defs are in the parent `traits`.
 
-use super::{Float, Num, Signed};
+use crate::dtype::traits::{Float, Num, Signed};
 use float8::{F8E4M3, F8E5M2};
 use half::{bf16, f16};
 

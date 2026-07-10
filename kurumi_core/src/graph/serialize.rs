@@ -11,7 +11,7 @@ mod encode;
 pub use decode::deserialize_graph;
 pub use encode::{serialize_graph, serialize_reachable};
 
-use super::{Graph, NodeId};
+use crate::graph::{Graph, NodeId};
 
 const MAGIC: &[u8] = b"KGPH";
 const VERSION: u8 = 1;

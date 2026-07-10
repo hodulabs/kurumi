@@ -1,9 +1,9 @@
 //! Gather/scatter, argsort, sort/topk, one-hot. N-d advanced indexing (gather_nd/scatter_nd)
 //! is in the `nd` submodule.
 
-use crate::{DType, Error, Graph, NodeId, Op, ScatterOp};
-
 mod nd;
+
+use crate::{DType, Error, Graph, NodeId, Op, ScatterOp};
 
 impl Graph {
     // primitives

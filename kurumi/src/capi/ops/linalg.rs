@@ -2,7 +2,7 @@
 // `write2`; svd (three factors) writes `out` inline. Each null-checks g and out, then
 // runs under `catch` so a bad node id returns KU_ERR instead of aborting.
 
-use super::write2;
+use crate::capi::ops::write2;
 use crate::capi::{KU_ERR, KuGraph, catch, null_handles, set_err};
 use kurumi_core::NodeId;
 

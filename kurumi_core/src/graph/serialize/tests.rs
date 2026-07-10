@@ -1,6 +1,6 @@
-use super::decode::{Reader, read_op};
-use super::encode::write_op;
-use super::*;
+use crate::graph::serialize::decode::{Reader, read_op};
+use crate::graph::serialize::encode::write_op;
+use crate::graph::serialize::*;
 use crate::graph::{ArgKind, Op, ScatterOp};
 use crate::{DType, Feeds, Storage, TensorVal, interpret_with};
 

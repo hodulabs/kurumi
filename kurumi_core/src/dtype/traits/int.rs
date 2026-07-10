@@ -1,7 +1,7 @@
 //! Integer element impls: numeric (wrapping) + Int (idiv/shl/shr) + Bitwise, plus bool
 //! Bitwise and integer Signed. Trait defs are in the parent `traits`.
 
-use super::{Bitwise, Int, Num, Signed};
+use crate::dtype::traits::{Bitwise, Int, Num, Signed};
 
 // int numerics wrap on overflow (defined behaviour for tensor arithmetic)
 macro_rules! impl_num_int {

@@ -2,10 +2,10 @@
 //! FFT convolution, and the analytic (Hilbert) signal. All pure decompositions -> autodiff &
 //! every backend for free. Window functions are in `windows`, STFT/ISTFT in `stft`.
 
-use crate::{Error, Graph, NodeId, Storage};
-
 mod stft;
 mod windows;
+
+use crate::{Error, Graph, NodeId, Storage};
 
 impl Graph {
     /// FFT along each axis in `axes` (applied in order). Real input promotes to complex.

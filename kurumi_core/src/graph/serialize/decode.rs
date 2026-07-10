@@ -1,6 +1,6 @@
 //! Decoding half: deserialize_graph replays push to rebuild the graph (shape/dtype
 //! re-inferred), plus read_op and the byte Reader.
-use super::{InputBinding, InputRole, MAGIC, Runnable, VERSION};
+use crate::graph::serialize::{InputBinding, InputRole, MAGIC, Runnable, VERSION};
 use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Error, Storage};
 

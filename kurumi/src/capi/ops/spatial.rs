@@ -1,7 +1,7 @@
 // Spatial / vision resize + pixel-shuffle wrappers (mirrors graph/ops/core/spatial.rs).
 // `cstr` (resize mode strings) comes from the parent `ops` module.
 
-use super::cstr;
+use crate::capi::ops::cstr;
 use crate::capi::{KU_ERR, KuGraph, build, set_err, usize_slice};
 use kurumi_core::NodeId;
 use std::ffi::c_char;

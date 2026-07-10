@@ -2,8 +2,8 @@
 //! instruction is one monomorphic loop over the row (auto-vectorized), only `depth` scratch
 //! rows live (L1-resident). Bit-identical to the per-element walk.
 
-use super::kernels::{apply_binary_from, apply_unary_from};
-use super::{Instr, Leaf};
+use crate::realize::tape::kernels::{apply_binary_from, apply_unary_from};
+use crate::realize::tape::{Instr, Leaf};
 use std::cell::RefCell;
 
 thread_local! {

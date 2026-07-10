@@ -1,7 +1,7 @@
 // Contraction ops: matmul, general contraction, weight-only quantized matmul, and
 // the standalone weight quantizer. `cstr` (einsum) comes from the parent module.
 
-use super::cstr;
+use crate::capi::ops::cstr;
 use crate::capi::{KU_ERR, KuGraph, build, raw_slice, set_err, usize_slice};
 use kurumi_core::{NodeId, quantize};
 use std::ffi::c_char;

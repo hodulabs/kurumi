@@ -2,8 +2,8 @@
 //! Movement views are affine, so each leaf's source offset is precomputed once and advanced
 //! incrementally at run time (no per-element Sym/Expr tree walk).
 
-use super::{Instr, Leaf};
 use crate::realize::repr::{BinOp, Expr};
+use crate::realize::tape::{Instr, Leaf};
 
 pub(super) fn compile(e: &Expr, rank: usize, leaves: &mut Vec<Leaf>, tape: &mut Vec<Instr>) -> bool {
     match e {

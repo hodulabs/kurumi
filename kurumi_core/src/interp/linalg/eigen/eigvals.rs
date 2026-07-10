@@ -1,8 +1,8 @@
 //! General (nonsymmetric) eigenvalues (interp kernel): unshifted QR algorithm, reusing the
 //! full QR helper from the sibling `qr`.
 
-use super::qr::qr_full_t;
 use crate::interp::linalg::LinFloat;
+use crate::interp::linalg::eigen::qr::qr_full_t;
 use crate::{DType, Elem, Storage};
 use num_complex::Complex;
 

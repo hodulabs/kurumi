@@ -1,7 +1,7 @@
 //! Encoding half of the graph IR codec: serialize_graph / serialize_reachable, the
 //! reachable-cone prune + dense remap, and write_op (the exhaustive encode match every new
 //! Op must extend).
-use super::{InputBinding, InputRole, MAGIC, VERSION};
+use crate::graph::serialize::{InputBinding, InputRole, MAGIC, VERSION};
 use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Storage};
 use std::collections::{HashMap, HashSet};

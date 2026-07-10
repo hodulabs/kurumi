@@ -1,4 +1,4 @@
-use super::*;
+use crate::graph::pass::simplify::*;
 use crate::{Graph, grad, interpret, node_count};
 
 // every rule is checked the same way: the rewritten root evaluates to the same

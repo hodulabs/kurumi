@@ -1,7 +1,7 @@
 // Pooling wrappers (mirrors graph/ops/nn/pool.rs). k/s (and per-axis for 2-D/3-D)
 // window/stride, no padding. `cstr` (reduce_window mode) comes from the `ops` module.
 
-use super::super::cstr;
+use crate::capi::ops::cstr;
 use crate::capi::{KU_ERR, KuGraph, build, set_err, usize_slice};
 use kurumi_core::NodeId;
 use std::ffi::c_char;

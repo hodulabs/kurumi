@@ -2,9 +2,9 @@
 //! dtype, plus dtype dispatch and the quant-matmul oracle. The f32 2D fast path (Accelerate /
 //! the `gemm` crate) is in `gemm.rs`. matmul/bmm/einsum all decompose to this one op.
 
-use crate::{DType, Num, Storage, TensorVal, cast, free_axes, inc, row_major_strides};
-
 mod gemm;
+
+use crate::{DType, Num, Storage, TensorVal, cast, free_axes, inc, row_major_strides};
 
 pub(crate) use gemm::dot_general;
 

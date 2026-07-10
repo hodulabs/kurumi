@@ -1,7 +1,7 @@
 // Gather / scatter / sort / mask-based indexing. `scatter_op` (the combiner decode)
 // comes from the parent module.
 
-use super::scatter_op;
+use crate::capi::ops::scatter_op;
 use crate::capi::{KU_ERR, KuGraph, build, set_err};
 use kurumi_core::NodeId;
 

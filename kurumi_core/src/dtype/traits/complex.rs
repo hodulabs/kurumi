@@ -5,7 +5,7 @@
 //! complex->complex casts are special-cased in convert.rs to keep the imaginary part. Trait
 //! defs are in the parent `traits`.
 
-use super::{Elem, Float, Num, Signed};
+use crate::dtype::traits::{Elem, Float, Num, Signed};
 use crate::{DType, Storage};
 use num_complex::Complex;
 

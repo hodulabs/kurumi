@@ -3,13 +3,13 @@
 //! one monomorphic loop per op -> auto-vectorized, kernels in `kernels`). Scalar per-element
 //! walk (`eval_expr`) is the fallback for the rare non-affine leaf.
 
-use crate::lower::index::{self, Guard};
-use crate::realize::repr::{BinOp, Expr, UnOp};
-use std::rc::Rc;
-
 mod compile;
 mod kernels;
 mod run;
+
+use crate::lower::index::{self, Guard};
+use crate::realize::repr::{BinOp, Expr, UnOp};
+use std::rc::Rc;
 
 fn eval_expr(e: &Expr, coord: &[usize]) -> f32 {
     match e {
