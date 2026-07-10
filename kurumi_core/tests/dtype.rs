@@ -145,6 +145,47 @@ fn integer_dot_general_all_dtypes() {
 }
 
 #[test]
+fn gather_scatter_all_integer_dtypes() {
+    // the index-tensor and scatter-combiner dispatches enumerated a subset of the integer
+    // dtypes the builder accepts, so gather with u16/i8/u64/... indices, or an i8/u16/...
+    // scatter-add operand, panicked at eval on a valid graph.
+    macro_rules! gather_with_idx {
+        ($variant:ident, $ty:ty) => {{
+            let mut g = Graph::new();
+            let x = g.constant(vec![10.0, 20.0, 30.0], vec![3]);
+            let idx = g.const_storage(Storage::$variant(vec![2 as $ty, 0]), vec![2]);
+            let y = g.gather(x, idx, 0).unwrap();
+            assert_eq!(interpret(&g, y).f32(), &[30.0, 10.0], "gather idx {}", stringify!($variant));
+        }};
+    }
+    gather_with_idx!(U8, u8);
+    gather_with_idx!(U16, u16);
+    gather_with_idx!(U32, u32);
+    gather_with_idx!(U64, u64);
+    gather_with_idx!(I8, i8);
+    gather_with_idx!(I16, i16);
+    gather_with_idx!(I32, i32);
+    gather_with_idx!(I64, i64);
+
+    // integer scatter-add on the operand dtypes the combiner dispatch was missing.
+    macro_rules! scatter_add {
+        ($variant:ident, $ty:ty) => {{
+            let mut g = Graph::new();
+            let op = g.const_storage(Storage::$variant(vec![1 as $ty, 1, 1]), vec![3]);
+            let idx = g.const_storage(Storage::I64(vec![0, 0, 2]), vec![3]);
+            let up = g.const_storage(Storage::$variant(vec![5 as $ty, 3, 7]), vec![3]);
+            let y = g.scatter(op, idx, up, 0, ScatterOp::Add).unwrap();
+            let Storage::$variant(v) = interpret(&g, y).storage else { panic!("dtype changed") };
+            assert_eq!(v, vec![9 as $ty, 1, 8], "scatter-add {}", stringify!($variant)); // op[0]+=5+3, op[2]+=7
+        }};
+    }
+    scatter_add!(I8, i8);
+    scatter_add!(I16, i16);
+    scatter_add!(U16, u16);
+    scatter_add!(U64, u64);
+}
+
+#[test]
 fn realize_falls_back_for_non_f32() {
     // an i32 graph: force() must route to the interpreter oracle and be correct
     let mut g = Graph::new();

@@ -138,6 +138,24 @@ fn metal_gather_along_matches_cpu() {
     }
 }
 
+// gather with a u32 index tensor on device: the index converter used to handle only i32/i64,
+// so a valid u32 index (a common framework index dtype) crashed on Metal while computing the
+// right answer on CPU -- a device-vs-oracle divergence, not just shared looseness.
+#[test]
+fn metal_gather_u32_indices_matches_cpu() {
+    use kurumi_core::{Backend, Storage};
+    let Some(metal) = MetalBackend::new() else {
+        return;
+    };
+    let mut g = Graph::new();
+    let x = g.constant(vec![10., 20., 30., 40.], vec![4]);
+    let idx = g.const_storage(Storage::U32(vec![3, 0, 2]), vec![3]);
+    let y = g.gather(x, idx, 0).unwrap();
+    let (gpu, cpu) = (metal.eval(&g, y), interpret(&g, y));
+    assert_eq!(gpu.f32(), cpu.f32(), "u32-indexed gather");
+    assert_eq!(gpu.f32(), &[40., 10., 30.]);
+}
+
 // scatter_along (index_add) on device: atomic add with DUPLICATE indices (the
 // embedding-gradient pattern) + Set, vs the CPU oracle.
 #[test]

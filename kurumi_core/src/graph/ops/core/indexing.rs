@@ -105,6 +105,9 @@ impl Graph {
                 format!("indices must be integer, got {:?}", self.dtype(indices)),
             ));
         }
+        if combine != ScatterOp::Set && !self.dtype(operand).is_int() && !self.dtype(operand).is_float() {
+            return Err(Error::shape("scatter_along", "Add/Max combiner needs a numeric operand"));
+        }
         self.same_dtype("scatter_along", operand, updates)?;
         if self.shape(indices) != self.shape(updates) {
             return Err(Error::shape("scatter_along", "indices and updates must share a shape"));

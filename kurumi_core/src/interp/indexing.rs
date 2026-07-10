@@ -9,7 +9,11 @@ macro_rules! scatter_num {
     ($k:path, $op:expr, $up:expr, $f:path, $sh:expr, $ax:expr, $idx:expr, $is:expr) => {
         match ($op, $up) {
             (Storage::U8(o), Storage::U8(u)) => Storage::U8($k(o, $sh, $ax, $idx, $is, u, $f)),
+            (Storage::U16(o), Storage::U16(u)) => Storage::U16($k(o, $sh, $ax, $idx, $is, u, $f)),
             (Storage::U32(o), Storage::U32(u)) => Storage::U32($k(o, $sh, $ax, $idx, $is, u, $f)),
+            (Storage::U64(o), Storage::U64(u)) => Storage::U64($k(o, $sh, $ax, $idx, $is, u, $f)),
+            (Storage::I8(o), Storage::I8(u)) => Storage::I8($k(o, $sh, $ax, $idx, $is, u, $f)),
+            (Storage::I16(o), Storage::I16(u)) => Storage::I16($k(o, $sh, $ax, $idx, $is, u, $f)),
             (Storage::I32(o), Storage::I32(u)) => Storage::I32($k(o, $sh, $ax, $idx, $is, u, $f)),
             (Storage::I64(o), Storage::I64(u)) => Storage::I64($k(o, $sh, $ax, $idx, $is, u, $f)),
             (Storage::F16(o), Storage::F16(u)) => Storage::F16($k(o, $sh, $ax, $idx, $is, u, $f)),
@@ -199,7 +203,11 @@ pub(crate) fn scatter_along_k<T: Copy>(
 pub(crate) fn indices_i64(s: &Storage) -> Vec<i64> {
     match s {
         Storage::U8(v) => v.iter().map(|&x| x as i64).collect(),
+        Storage::U16(v) => v.iter().map(|&x| x as i64).collect(),
         Storage::U32(v) => v.iter().map(|&x| x as i64).collect(),
+        Storage::U64(v) => v.iter().map(|&x| x as i64).collect(),
+        Storage::I8(v) => v.iter().map(|&x| x as i64).collect(),
+        Storage::I16(v) => v.iter().map(|&x| x as i64).collect(),
         Storage::I32(v) => v.iter().map(|&x| x as i64).collect(),
         Storage::I64(v) => v.clone(),
         _ => unreachable!("gather/scatter indices must be integer (record-time validated)"),

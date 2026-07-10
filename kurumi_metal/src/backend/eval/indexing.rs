@@ -133,6 +133,12 @@ fn combine_str(c: ScatterOp) -> &'static str {
 // gather indices (i32/i64) -> i32 for the GPU index buffer.
 fn storage_i32(s: &Storage) -> Vec<i32> {
     match s {
+        Storage::U8(v) => v.iter().map(|&x| x as i32).collect(),
+        Storage::U16(v) => v.iter().map(|&x| x as i32).collect(),
+        Storage::U32(v) => v.iter().map(|&x| x as i32).collect(),
+        Storage::U64(v) => v.iter().map(|&x| x as i32).collect(),
+        Storage::I8(v) => v.iter().map(|&x| x as i32).collect(),
+        Storage::I16(v) => v.iter().map(|&x| x as i32).collect(),
         Storage::I32(v) => v.clone(),
         Storage::I64(v) => v.iter().map(|&x| x as i32).collect(),
         _ => panic!("gather indices must be integer, got {:?}", s.dtype()),
