@@ -124,6 +124,7 @@ impl Graph {
         if axis >= rank {
             return Err(Error::shape("softmax", format!("axis {axis} out of range for rank {rank}")));
         }
+        self.require("softmax", x, self.dtype(x).is_float(), "float")?;
         Ok(self.push(Op::Softmax { axis }, vec![x]))
     }
 

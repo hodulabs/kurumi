@@ -1,5 +1,6 @@
 //! Integration tests: primitive & decomposed ops (indexing, RNG, norm, attention).
 
+use half::f16;
 use kurumi_core::*;
 
 // new ops
@@ -347,7 +348,7 @@ fn quant_matmul_guard() {
     let mut g = Graph::new();
     let act = g.constant(vec![0.0; 4], vec![1, 4]); // [M=1, K=4]
     let qw = g.const_storage(Storage::U8(vec![0; 4]), vec![2, 2]); // [N=2, K*bits/8=2] for int4
-    let sc = g.constant(vec![0.0; 4], vec![2, 2]); // [N=2, K/group_size=2] -> 4 entries
+    let sc = g.const_storage(Storage::F16(vec![f16::ZERO; 4]), vec![2, 2]); // [N=2, K/group_size=2] -> 4 entries
     // valid: int4, group_size 2, consistent qweight cols + scales count
     assert!(g.quant_matmul(act, qw, sc, None, 4, 2).is_ok());
     // bits not in {2,4,8}
@@ -358,6 +359,13 @@ fn quant_matmul_guard() {
     // qweight cols inconsistent with K*bits/8: int8 needs cols=4, qw has 2
     assert!(g.quant_matmul(act, qw, sc, None, 8, 2).is_err());
     // scales entry count mismatch (want N*K/group_size = 4)
-    let bad_sc = g.constant(vec![0.0; 2], vec![2, 1]);
+    let bad_sc = g.const_storage(Storage::F16(vec![f16::ZERO; 2]), vec![2, 1]);
     assert!(g.quant_matmul(act, qw, bad_sc, None, 4, 2).is_err());
+    // dtype guards: qweight must be U8, scales/mins F16, act float (else eval unreachable)
+    let qw_f32 = g.constant(vec![0.0; 4], vec![2, 2]);
+    assert!(g.quant_matmul(act, qw_f32, sc, None, 4, 2).is_err(), "qweight must be U8");
+    let sc_f32 = g.constant(vec![0.0; 4], vec![2, 2]);
+    assert!(g.quant_matmul(act, qw, sc_f32, None, 4, 2).is_err(), "scales must be F16");
+    let act_int = g.const_storage(Storage::I32(vec![0; 4]), vec![1, 4]);
+    assert!(g.quant_matmul(act_int, qw, sc, None, 4, 2).is_err(), "act must be float");
 }

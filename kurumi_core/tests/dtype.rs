@@ -186,6 +186,23 @@ fn gather_scatter_all_integer_dtypes() {
 }
 
 #[test]
+fn complex_is_rejected_at_record_time() {
+    // bitwise/softmax/rmsnorm/sdpa builders admitted complex, which then panicked (CPU) or was
+    // silently computed on the real part (softmax cast C64->F32); they must Err at record time.
+    let mut g = Graph::new();
+    let f = g.constant(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]);
+    let c = g.cast(f, DType::C64);
+    assert!(g.and(c, c).is_err(), "bitwise and on complex");
+    assert!(g.or(c, c).is_err());
+    assert!(g.xor(c, c).is_err());
+    assert!(g.softmax(c, 1).is_err(), "softmax on complex");
+    assert!(g.rmsnorm(c, 1, 1e-5).is_err(), "rmsnorm on complex");
+    let f3 = g.constant(vec![0.5; 8], vec![2, 2, 2]);
+    let c3 = g.cast(f3, DType::C64);
+    assert!(g.sdpa(c3, c3, c3, false).is_err(), "sdpa on complex");
+}
+
+#[test]
 fn realize_falls_back_for_non_f32() {
     // an i32 graph: force() must route to the interpreter oracle and be correct
     let mut g = Graph::new();

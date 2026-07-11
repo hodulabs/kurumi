@@ -76,6 +76,7 @@ impl Graph {
     /// ONLY when self-attention's `[..,S,S]` score buffer would be prohibitively large.
     /// Cross-attention (S_q != S_k) always decomposes. Autodiff free either way.
     pub fn sdpa(&mut self, q: NodeId, k: NodeId, v: NodeId, causal: bool) -> Result<NodeId, Error> {
+        self.require("sdpa", q, self.dtype(q).is_float(), "float")?;
         let (qs, ks, vs) = (self.shape(q), self.shape(k), self.shape(v));
         let r = qs.len();
         let (batch, s) = (qs[..r - 2].iter().product::<usize>(), qs[r - 2]);

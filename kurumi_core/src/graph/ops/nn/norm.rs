@@ -34,6 +34,7 @@ impl Graph {
         if axis >= rank {
             return Err(Error::shape("rmsnorm", format!("axis {axis} out of range for rank {rank}")));
         }
+        self.require("rmsnorm", x, self.dtype(x).is_float(), "float")?;
         Ok(self.push(Op::RmsNorm { axis, eps }, vec![x]))
     }
 

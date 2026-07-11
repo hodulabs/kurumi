@@ -22,15 +22,15 @@ impl Graph {
         self.bin("shr", Op::Shr, a, b)
     }
     pub fn and(&mut self, a: NodeId, b: NodeId) -> Result<NodeId, Error> {
-        self.require("and", a, !self.dtype(a).is_float(), "bool/integer")?;
+        self.require("and", a, !self.dtype(a).is_float() && !self.dtype(a).is_complex(), "bool/integer")?;
         self.bin("and", Op::And, a, b)
     }
     pub fn or(&mut self, a: NodeId, b: NodeId) -> Result<NodeId, Error> {
-        self.require("or", a, !self.dtype(a).is_float(), "bool/integer")?;
+        self.require("or", a, !self.dtype(a).is_float() && !self.dtype(a).is_complex(), "bool/integer")?;
         self.bin("or", Op::Or, a, b)
     }
     pub fn xor(&mut self, a: NodeId, b: NodeId) -> Result<NodeId, Error> {
-        self.require("xor", a, !self.dtype(a).is_float(), "bool/integer")?;
+        self.require("xor", a, !self.dtype(a).is_float() && !self.dtype(a).is_complex(), "bool/integer")?;
         self.bin("xor", Op::Xor, a, b)
     }
 

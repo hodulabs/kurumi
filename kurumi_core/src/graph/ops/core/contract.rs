@@ -5,7 +5,7 @@
 mod einsum;
 
 use crate::layout::check_axes;
-use crate::{Error, Graph, NodeId, Op};
+use crate::{DType, Error, Graph, NodeId, Op};
 
 impl Graph {
     /// Strict contraction (no 1D promotion, no batch broadcast).
@@ -62,6 +62,22 @@ impl Graph {
         let (ra, rq) = (sa.len(), sq.len());
         if ra != 2 || rq != 2 {
             return Err(Error::shape("quant_matmul", format!("act rank {ra}, qweight rank {rq}: both must be rank-2")));
+        }
+        // the interp/metal kernels assume a U8-packed weight, F16 scales/mins, and a float
+        // activation; validate here so a mismatched const node is a clean Err, not an eval unreachable.
+        if self.dtype(qweight) != DType::U8 {
+            return Err(Error::shape("quant_matmul", format!("qweight must be U8, got {:?}", self.dtype(qweight))));
+        }
+        if self.dtype(scales) != DType::F16 {
+            return Err(Error::shape("quant_matmul", format!("scales must be F16, got {:?}", self.dtype(scales))));
+        }
+        if let Some(m) = mins
+            && self.dtype(m) != DType::F16
+        {
+            return Err(Error::shape("quant_matmul", format!("mins must be F16, got {:?}", self.dtype(m))));
+        }
+        if !self.dtype(act).is_float() {
+            return Err(Error::shape("quant_matmul", format!("act must be float, got {:?}", self.dtype(act))));
         }
         // Fail fast at record time: an out-of-range bits/group_size or a mis-sized
         // qweight/scales otherwise defers to an eval-time unreachable or silent-wrong dequant.
