@@ -140,9 +140,54 @@ fn reachable_prunes_dead_nodes() {
     assert_eq!(got.f32().to_vec(), vec![12.0, 21.0]);
 }
 
-const GOLDEN_V1: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/graph_v1.kgph");
+// two named entries share one arena: their output cones overlap (both go through `a`), and
+// serialize_multi prunes to the union, dense-remaps once, and writes both entries. Each
+// entry's outputs/inputs round-trip and eval correctly against the shared rebuilt graph.
+#[test]
+fn multi_entry_round_trips() {
+    let mut g = Graph::new();
+    let x = g.input(vec![2, 3], DType::F32);
+    let w = g.constant(vec![2.0; 6], vec![2, 3]);
+    let a = g.push(Op::Add, vec![x, w]); // shared by both cones
+    let fwd = g.push(Op::Sum { axis: 1 }, vec![a]);
+    let scaled = g.push(Op::Mul, vec![a, w]);
+    let bwd = g.push(Op::Sum { axis: 1 }, vec![scaled]);
 
-// a fixed all-const graph whose serialized bytes are frozen as the v1 wire-format baseline.
+    let fwd_in = vec![InputBinding { node: x, role: InputRole::Runtime, name: "x".into() }];
+    let bwd_in = vec![
+        InputBinding { node: x, role: InputRole::Runtime, name: "x".into() },
+        InputBinding { node: a, role: InputRole::Weight, name: "a".into() },
+    ];
+    let blob = serialize_multi(&g, &[("forward", &[fwd], &fwd_in), ("forward_backward", &[bwd], &bwd_in)]);
+
+    let mr = deserialize_multi(&blob).expect("deserialize_multi");
+    assert_eq!(mr.entries.len(), 2);
+    assert_eq!(mr.entries[0].name, "forward");
+    assert_eq!(mr.entries[1].name, "forward_backward");
+    assert_eq!(mr.entries[0].inputs.len(), 1);
+    assert_eq!(mr.entries[1].inputs.len(), 2);
+    assert_eq!(mr.entries[1].inputs[1].name, "a");
+    assert_eq!(mr.entries[1].inputs[1].role, InputRole::Weight);
+
+    // "x" is the same shared node in both entries (one arena) -- feed it once, eval both outputs.
+    let x_node = mr.entries[0].inputs[0].node;
+    assert_eq!(mr.entries[1].inputs[0].node, x_node);
+    let mut feeds = Feeds::new();
+    feeds.insert(x_node, TensorVal { shape: vec![2, 3], storage: Storage::F32(vec![1., 2., 3., 4., 5., 6.]) });
+    let fwd_val = interpret_with(&mr.graph, mr.entries[0].outputs[0], &feeds);
+    let bwd_val = interpret_with(&mr.graph, mr.entries[1].outputs[0], &feeds);
+    assert_eq!(fwd_val.f32().to_vec(), vec![12.0, 21.0]);
+    assert_eq!(bwd_val.f32().to_vec(), vec![24.0, 42.0]);
+
+    // entry 0 is what the back-compat single-entry path returns.
+    let r = deserialize_graph(&blob).expect("deserialize_graph");
+    assert_eq!(r.outputs, mr.entries[0].outputs);
+    assert_eq!(r.inputs, mr.entries[0].inputs);
+}
+
+const GOLDEN_V2: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/graph_v2.kgph");
+
+// a fixed all-const graph whose serialized bytes are frozen as the v2 wire-format baseline.
 fn golden_graph() -> (Graph, Vec<NodeId>, Vec<InputBinding>) {
     let mut g = Graph::new();
     let x = g.constant(vec![1., 2., 3., 4., 5., 6.], vec![2, 3]);
@@ -152,25 +197,25 @@ fn golden_graph() -> (Graph, Vec<NodeId>, Vec<InputBinding>) {
     (g, vec![out], vec![])
 }
 
-// dev tool (run with --ignored): (re)generate the committed v1 golden blob after an
+// dev tool (run with --ignored): (re)generate the committed v2 golden blob after an
 // intentional wire-format change.
 #[test]
-#[ignore = "regenerates the committed v1 golden blob"]
+#[ignore = "regenerates the committed v2 golden blob"]
 fn gen_golden_blob() {
     let (g, outs, ins) = golden_graph();
     let blob = serialize_graph(&g, &outs, &ins);
-    std::fs::create_dir_all(std::path::Path::new(GOLDEN_V1).parent().unwrap()).unwrap();
-    std::fs::write(GOLDEN_V1, blob).unwrap();
+    std::fs::create_dir_all(std::path::Path::new(GOLDEN_V2).parent().unwrap()).unwrap();
+    std::fs::write(GOLDEN_V2, blob).unwrap();
 }
 
-// the v1 wire format is frozen: re-serializing the fixed graph must reproduce the committed
+// the v2 wire format is frozen: re-serializing the fixed graph must reproduce the committed
 // bytes (catches an accidental encoder change that a round-trip alone would miss), and the
 // committed bytes still decode and compute the known value.
 #[test]
 fn golden_blob_is_stable() {
-    let golden = std::fs::read(GOLDEN_V1).expect("run `cargo test gen_golden_blob -- --ignored` first");
+    let golden = std::fs::read(GOLDEN_V2).expect("run `cargo test gen_golden_blob -- --ignored` first");
     let (g, outs, ins) = golden_graph();
-    assert_eq!(serialize_graph(&g, &outs, &ins), golden, "v1 graph wire format changed; regenerate if intentional");
+    assert_eq!(serialize_graph(&g, &outs, &ins), golden, "v2 graph wire format changed; regenerate if intentional");
     let r = deserialize_graph(&golden).unwrap();
     assert_eq!(interpret_with(&r.graph, r.outputs[0], &Feeds::new()).f32(), &[12.0, 21.0]);
 }
@@ -186,7 +231,7 @@ fn rejects_bad_magic() {
 // then one Add node with src [0].)
 #[test]
 fn rejects_forward_src_ref() {
-    let mut b = b"KGPH\x01".to_vec();
+    let mut b = b"KGPH\x02".to_vec();
     b.extend_from_slice(&1u32.to_le_bytes()); // n = 1 node
     b.push(7); // Op::Add (no attrs)
     b.extend_from_slice(&1u32.to_le_bytes()); // 1 src
@@ -198,7 +243,7 @@ fn rejects_forward_src_ref() {
 // must be a clean error, not a short storage that OOBs downstream.
 #[test]
 fn rejects_const_payload_underfill() {
-    let mut b = b"KGPH\x01".to_vec();
+    let mut b = b"KGPH\x02".to_vec();
     b.extend_from_slice(&1u32.to_le_bytes()); // n = 1 node
     b.push(0); // Op::Const
     b.push(13); // storage dtype = F32

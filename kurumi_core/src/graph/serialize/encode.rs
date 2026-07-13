@@ -1,5 +1,5 @@
-//! Encoding half of the graph IR codec: serialize_graph / serialize_reachable, the
-//! reachable-cone prune + dense remap, and write_op (the exhaustive encode match every new
+//! Encoding half of the graph IR codec: serialize_graph / serialize_reachable / serialize_multi,
+//! the reachable-cone prune + dense remap, and write_op (the exhaustive encode match every new
 //! Op must extend).
 use crate::graph::inspect::reachable_multi;
 use crate::graph::serialize::{InputBinding, InputRole, MAGIC, VERSION};
@@ -7,23 +7,50 @@ use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Storage};
 use std::collections::HashMap;
 
+// one entry's roots + bindings, already remapped to the blob's dense id range.
+struct EncEntry<'a> {
+    name: &'a str,
+    outputs: Vec<u32>,
+    inputs: Vec<(u32, InputRole, &'a str)>,
+}
+
 /// Serialize a graph and its output/input bindings into a self-contained blob. The whole
-/// node arena is written in id order (id-preserving). See [`serialize_reachable`] to write
-/// only the live cone.
+/// node arena is written in id order (id-preserving); the bindings become the blob's single
+/// entry (name ""). See [`serialize_reachable`] to write only the live cone, [`serialize_multi`]
+/// for N named entries.
 pub fn serialize_graph(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding]) -> Vec<u8> {
     let nodes: Vec<(&Op, Vec<u32>)> = g.nodes.iter().map(|n| (&n.op, n.src.iter().map(|s| s.0).collect())).collect();
-    let outs: Vec<u32> = outputs.iter().map(|o| o.0).collect();
-    let ins: Vec<(u32, InputRole, &str)> = inputs.iter().map(|b| (b.node.0, b.role, b.name.as_str())).collect();
-    write_blob(&nodes, &outs, &ins)
+    let e = EncEntry {
+        name: "",
+        outputs: outputs.iter().map(|o| o.0).collect(),
+        inputs: inputs.iter().map(|b| (b.node.0, b.role, b.name.as_str())).collect(),
+    };
+    write_blob(&nodes, &[e])
 }
 
 /// Serialize only the nodes reachable from `outputs`, remapped to a dense id range. Arena
 /// nodes no output depends on -- backward nodes from a training `grad()`, dead builder
 /// scratch -- are dropped, so a live graph exports a clean inference program. Input bindings
-/// whose node is unreachable are omitted. The blob reads back via [`deserialize_graph`] just
-/// like a whole-arena one (it is already dense and topologically ordered).
+/// whose node is unreachable are omitted; the bindings become the blob's single entry (name "").
+/// The blob reads back via [`deserialize_graph`] just like a whole-arena one (it is already
+/// dense and topologically ordered).
 pub fn serialize_reachable(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding]) -> Vec<u8> {
-    let order = reachable_multi(g, outputs);
+    write_reachable(g, outputs, &[("", outputs, inputs)])
+}
+
+/// Serialize N named entries sharing one arena: prune to the UNION of every entry's output
+/// cone, dense-remap once, then write each entry's remapped outputs + inputs (an entry input
+/// whose node is unreachable is dropped, as in [`serialize_reachable`]). One artifact can thus
+/// carry e.g. "forward" and "forward_backward". Read back with [`deserialize_multi`];
+/// [`deserialize_graph`] returns entry 0.
+pub fn serialize_multi(g: &Graph, entries: &[(&str, &[NodeId], &[InputBinding])]) -> Vec<u8> {
+    let roots: Vec<NodeId> = entries.iter().flat_map(|&(_, outs, _)| outs.iter().copied()).collect();
+    write_reachable(g, &roots, entries)
+}
+
+// prune to the cone of `roots`, dense-remap once, and write each entry over the remapped ids.
+fn write_reachable(g: &Graph, roots: &[NodeId], entries: &[(&str, &[NodeId], &[InputBinding])]) -> Vec<u8> {
+    let order = reachable_multi(g, roots);
     let remap: HashMap<NodeId, u32> = order.iter().enumerate().map(|(i, &id)| (id, i as u32)).collect();
     let nodes: Vec<(&Op, Vec<u32>)> = order
         .iter()
@@ -32,14 +59,20 @@ pub fn serialize_reachable(g: &Graph, outputs: &[NodeId], inputs: &[InputBinding
             (&n.op, n.src.iter().map(|s| remap[s]).collect())
         })
         .collect();
-    let outs: Vec<u32> = outputs.iter().map(|o| remap[o]).collect();
-    let ins: Vec<(u32, InputRole, &str)> =
-        inputs.iter().filter_map(|b| remap.get(&b.node).map(|&id| (id, b.role, b.name.as_str()))).collect();
-    write_blob(&nodes, &outs, &ins)
+    let enc: Vec<EncEntry> = entries
+        .iter()
+        .map(|&(name, outs, ins)| EncEntry {
+            name,
+            outputs: outs.iter().map(|o| remap[o]).collect(),
+            inputs: ins.iter().filter_map(|b| remap.get(&b.node).map(|&id| (id, b.role, b.name.as_str()))).collect(),
+        })
+        .collect();
+    write_blob(&nodes, &enc)
 }
 
-// shared blob encoder: nodes already in dense id order, src as new-id u32s.
-fn write_blob(nodes: &[(&Op, Vec<u32>)], outputs: &[u32], inputs: &[(u32, InputRole, &str)]) -> Vec<u8> {
+// shared blob encoder: nodes already in dense id order (src as new-id u32s), then the entry
+// table -- each entry's outputs/inputs use the same ids.
+fn write_blob(nodes: &[(&Op, Vec<u32>)], entries: &[EncEntry]) -> Vec<u8> {
     let mut o = Vec::new();
     o.extend_from_slice(MAGIC);
     w_u8(&mut o, VERSION);
@@ -51,19 +84,23 @@ fn write_blob(nodes: &[(&Op, Vec<u32>)], outputs: &[u32], inputs: &[(u32, InputR
             w_u32(&mut o, s);
         }
     }
-    w_u32(&mut o, outputs.len() as u32);
-    for &out in outputs {
-        w_u32(&mut o, out);
-    }
-    w_u32(&mut o, inputs.len() as u32);
-    for &(node, role, name) in inputs {
-        w_u32(&mut o, node);
-        let r = match role {
-            InputRole::Weight => 0,
-            InputRole::Runtime => 1,
-        };
-        w_u8(&mut o, r);
-        w_str(&mut o, name);
+    w_u32(&mut o, entries.len() as u32);
+    for e in entries {
+        w_str(&mut o, e.name);
+        w_u32(&mut o, e.outputs.len() as u32);
+        for &out in &e.outputs {
+            w_u32(&mut o, out);
+        }
+        w_u32(&mut o, e.inputs.len() as u32);
+        for &(node, role, name) in &e.inputs {
+            w_u32(&mut o, node);
+            let r = match role {
+                InputRole::Weight => 0,
+                InputRole::Runtime => 1,
+            };
+            w_u8(&mut o, r);
+            w_str(&mut o, name);
+        }
     }
     o
 }

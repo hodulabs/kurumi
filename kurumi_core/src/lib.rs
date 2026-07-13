@@ -23,8 +23,9 @@ pub use dtype::{DType, Storage, TensorVal};
 pub use error::Error;
 pub use grad::grad;
 pub use graph::{
-    ArgKind, Graph, InputBinding, InputRole, Node, NodeId, Op, Runnable, ScatterOp, amp, deserialize_graph, dump,
-    node_count, reachable, serialize_graph, serialize_reachable, simplify,
+    ArgKind, Entry, Graph, InputBinding, InputRole, MultiRunnable, Node, NodeId, Op, Runnable, ScatterOp, amp,
+    deserialize_graph, deserialize_multi, dump, node_count, reachable, serialize_graph, serialize_multi,
+    serialize_reachable, simplify,
 };
 pub(crate) use interp::{dot_dispatch, dot_general, reduce_v};
 pub use interp::{eval_op, interpret, interpret_many, interpret_with};

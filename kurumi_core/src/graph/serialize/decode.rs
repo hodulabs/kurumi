@@ -1,16 +1,32 @@
-//! Decoding half: deserialize_graph replays push to rebuild the graph (shape/dtype
-//! re-inferred), plus read_op and the byte Reader.
-use crate::graph::serialize::{InputBinding, InputRole, MAGIC, Runnable, VERSION};
+//! Decoding half: deserialize_graph / deserialize_multi replay push to rebuild the graph
+//! (shape/dtype re-inferred) then read the entry table, plus read_op and the byte Reader.
+use crate::graph::serialize::{Entry, InputBinding, InputRole, MAGIC, MultiRunnable, Runnable, VERSION};
 use crate::graph::{ArgKind, Graph, NodeId, Op, ScatterOp};
 use crate::{DType, Error, Storage};
 
-/// Rebuild a graph from a blob by replaying `push` in id order (shape/dtype re-inferred).
-/// This is a trust boundary: a corrupt length/tag, or a src that references a not-yet-built
-/// node, is a clean error -- never a panic. A structurally valid blob with semantically bogus
-/// attrs (a Reshape whose product != input, an axis past rank) can still panic in inference,
-/// the same contract the builder has for live graphs; the C ABI wraps this in a panic guard
-/// (`ku_graph_deserialize`), so the FFI boundary never aborts on such a blob.
+/// Rebuild the forward graph from a blob and return entry 0 (the single/forward entry) for
+/// back-compat -- clean error if the blob carries no entries. See [`deserialize_multi`] for all
+/// entries. This is a trust boundary: a corrupt length/tag, or a src that references a
+/// not-yet-built node, is a clean error -- never a panic. A structurally valid blob with
+/// semantically bogus attrs (a Reshape whose product != input, an axis past rank) can still
+/// panic in inference, the same contract the builder has for live graphs; the C ABI wraps this
+/// in a panic guard (`ku_graph_deserialize`), so the FFI boundary never aborts on such a blob.
 pub fn deserialize_graph(bytes: &[u8]) -> Result<Runnable, Error> {
+    let (graph, entries) = read_graph(bytes)?;
+    let e = entries.into_iter().next().ok_or_else(|| err("graph blob has no entries"))?;
+    Ok(Runnable { graph, outputs: e.outputs, inputs: e.inputs })
+}
+
+/// Rebuild a graph and all its named entries from a blob (shared node arena). Same trust
+/// boundary as [`deserialize_graph`].
+pub fn deserialize_multi(bytes: &[u8]) -> Result<MultiRunnable, Error> {
+    let (graph, entries) = read_graph(bytes)?;
+    Ok(MultiRunnable { graph, entries })
+}
+
+// Replay the node section (shape/dtype re-inferred), then read the entry table. The node loop
+// is the trust boundary (see [`deserialize_graph`]).
+fn read_graph(bytes: &[u8]) -> Result<(Graph, Vec<Entry>), Error> {
     let mut r = Reader::new(bytes);
     if r.take(4)? != MAGIC {
         return Err(err("bad magic (not a KGPH graph blob)"));
@@ -38,20 +54,26 @@ pub fn deserialize_graph(bytes: &[u8]) -> Result<Runnable, Error> {
         }
         g.push(op, src);
     }
-    let outputs = r.node_id_vec()?;
-    let ni = r.u32()? as usize;
-    let mut inputs = Vec::new();
-    for _ in 0..ni {
-        let node = r.node_id()?;
-        let role = match r.u8()? {
-            0 => InputRole::Weight,
-            1 => InputRole::Runtime,
-            x => return Err(err(format!("bad input role {x}"))),
-        };
+    let ne = r.u32()? as usize;
+    let mut entries = Vec::new();
+    for _ in 0..ne {
         let name = r.str()?;
-        inputs.push(InputBinding { node, role, name });
+        let outputs = r.node_id_vec()?;
+        let ni = r.u32()? as usize;
+        let mut inputs = Vec::new();
+        for _ in 0..ni {
+            let node = r.node_id()?;
+            let role = match r.u8()? {
+                0 => InputRole::Weight,
+                1 => InputRole::Runtime,
+                x => return Err(err(format!("bad input role {x}"))),
+            };
+            let name = r.str()?;
+            inputs.push(InputBinding { node, role, name });
+        }
+        entries.push(Entry { name, outputs, inputs });
     }
-    Ok(Runnable { graph: g, outputs, inputs })
+    Ok((g, entries))
 }
 
 pub(super) fn read_op(r: &mut Reader) -> Result<Op, Error> {

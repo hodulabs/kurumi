@@ -430,7 +430,19 @@ size_t ku_graph_serialize(const KuGraph *g, const KuNode *outputs, size_t n_out,
 size_t ku_graph_serialize_reachable(const KuGraph *g, const KuNode *outputs, size_t n_out, const KuNode *in_nodes,
                                     const uint8_t *in_roles, const char *const *in_names, size_t n_in, uint8_t *out,
                                     size_t cap);
-/* Rebuild a blob into a runnable handle (NULL on a malformed blob); free with ku_runnable_free. */
+/* Serialize N named entry points sharing one arena into one blob (so one artifact holds e.g.
+ * "forward" and "forward_backward"). names holds n_entries NUL-terminated entry names. Outputs
+ * are flattened: out_counts[e] is entry e's output count, outputs concatenates all entries'
+ * output ids. Inputs likewise: in_counts[e] is entry e's input count, and in_nodes/in_roles/
+ * in_names concatenate all entries' bindings. Only the union of the entries' output cones is
+ * written (remapped dense). Size-then-write: cap=0 with out=NULL returns the length. */
+size_t ku_graph_serialize_multi(const KuGraph *g, size_t n_entries, const char *const *names,
+                                const uint32_t *out_counts, const KuNode *outputs, const uint32_t *in_counts,
+                                const KuNode *in_nodes, const uint8_t *in_roles, const char *const *in_names,
+                                uint8_t *out, size_t cap);
+/* Rebuild a blob (single- or multi-entry) into a runnable handle (NULL on a malformed or
+ * entry-less blob); free with ku_runnable_free. The non-`entry` accessors expose entry 0 (the
+ * single/forward entry); ku_runnable_entry_* reach all entries. */
 KuRunnable *ku_graph_deserialize(const uint8_t *bytes, size_t len);
 /* Move the rebuilt graph out of the runnable (call once); free it with ku_graph_free. */
 KuGraph *ku_runnable_take_graph(KuRunnable *h);
@@ -441,6 +453,17 @@ KuNode ku_runnable_input_node(const KuRunnable *h, size_t i);
 uint32_t ku_runnable_input_role(const KuRunnable *h, size_t i);
 /* Write up to cap bytes of the i-th input name (UTF-8, no NUL); returns the full length. */
 size_t ku_runnable_input_name(const KuRunnable *h, size_t i, uint8_t *out, size_t cap);
+/* entry-scoped accessors: i indexes the entry, j the output/input within it. */
+size_t ku_runnable_entry_count(const KuRunnable *h);
+/* Write up to cap bytes of the i-th entry name (UTF-8, no NUL); returns the full length. */
+size_t ku_runnable_entry_name(const KuRunnable *h, size_t i, uint8_t *out, size_t cap);
+size_t ku_runnable_entry_output_count(const KuRunnable *h, size_t i);
+KuNode ku_runnable_entry_output(const KuRunnable *h, size_t i, size_t j);
+size_t ku_runnable_entry_input_count(const KuRunnable *h, size_t i);
+KuNode ku_runnable_entry_input_node(const KuRunnable *h, size_t i, size_t j);
+uint32_t ku_runnable_entry_input_role(const KuRunnable *h, size_t i, size_t j);
+/* Write up to cap bytes of the (i,j)-th entry input name (UTF-8, no NUL); returns full length. */
+size_t ku_runnable_entry_input_name(const KuRunnable *h, size_t i, size_t j, uint8_t *out, size_t cap);
 void ku_runnable_free(KuRunnable *h);
 
 /* plan-replay: compile once, run per feeds (consts never re-copied) */

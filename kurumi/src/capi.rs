@@ -15,7 +15,7 @@ mod tensor;
 mod tests;
 
 use kurumi_core::realize::Plan;
-use kurumi_core::{Backend, DType, Feeds, Graph, NodeId, Runnable, TensorVal};
+use kurumi_core::{Backend, DType, Feeds, Graph, MultiRunnable, NodeId, TensorVal};
 use std::cell::RefCell;
 use std::ffi::{CString, c_char};
 use std::ptr;
@@ -29,7 +29,8 @@ pub struct KuTensor(TensorVal);
 pub struct KuFeeds(Feeds);
 pub struct KuBackend(Box<dyn Backend>);
 pub struct KuPlan(Plan);
-pub struct KuRunnable(Runnable);
+// holds every entry; entry 0 is exposed through the non-`entry` accessors for back-compat.
+pub struct KuRunnable(MultiRunnable);
 
 thread_local! {
     static LAST_ERR: RefCell<Option<CString>> = const { RefCell::new(None) };
