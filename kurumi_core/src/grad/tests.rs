@@ -95,3 +95,28 @@ fn grad_softmax_decomposed() {
         g.mul(sm, w).unwrap()
     });
 }
+
+#[test]
+fn grad_rmsnorm() {
+    // weighted so the summed loss has a non-trivial gradient through the normalization.
+    grad_check(&[(vec![1., 2., 3., -1., 0.5, 2.], vec![2, 3])], |g, x| {
+        let n = g.rmsnorm(x[0], 1, 1e-5).unwrap();
+        let w = g.constant(vec![1., 2., 3., 4., 5., 6.], vec![2, 3]);
+        g.mul(n, w).unwrap()
+    });
+}
+
+#[test]
+fn grad_prod() {
+    // non-zero inputs: d/dx_i prod = prod_{j!=i} x_j (the exactly-zero path is separate).
+    grad_check(&[(vec![1.5, -2., 0.5, 2., 1., -1.], vec![2, 3])], |g, x| g.prod(x[0], 1).unwrap());
+}
+
+#[test]
+fn grad_sdpa_fused() {
+    // small non-causal attention over q/k/v: exercises the fused Sdpa VJP end to end.
+    let q = (vec![0.1, 0.2, -0.1, 0.0, 0.3, -0.2], vec![1, 2, 3]);
+    let k = (vec![0.2, -0.1, 0.1, 0.1, 0.0, 0.2], vec![1, 2, 3]);
+    let v = (vec![0.5, -0.3, 0.2, -0.1, 0.4, 0.1], vec![1, 2, 3]);
+    grad_check(&[q, k, v], |g, x| g.sdpa(x[0], x[1], x[2], false).unwrap());
+}

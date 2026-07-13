@@ -4,10 +4,14 @@
 use half::{bf16, f16};
 use kurumi_core::*;
 
-const ALL: [DType; 11] = [
+const ALL: [DType; 17] = [
     DType::BOOL,
     DType::U8,
+    DType::U16,
     DType::U32,
+    DType::U64,
+    DType::I8,
+    DType::I16,
     DType::I32,
     DType::I64,
     DType::F8E4M3,
@@ -16,6 +20,8 @@ const ALL: [DType; 11] = [
     DType::BF16,
     DType::F32,
     DType::F64,
+    DType::C64,
+    DType::C128,
 ];
 
 // dtype tests

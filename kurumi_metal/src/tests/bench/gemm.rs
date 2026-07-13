@@ -78,6 +78,49 @@ fn metal_training_step_bench() {
     }
 }
 
+// GPU-time GFLOPS on the non-square [M,K]x[K,N] shapes real transformer projections use (attn
+// qkv/out, mlp up/down, and the M=1 decode GEMV), where the square microbench does not predict
+// efficiency. Quantifies how far MPS is from the chip roofline per shape -> whether a steel port
+// pays off, and the target to beat.
+#[test]
+#[ignore = "benchmark; run with --release"]
+fn projection_gemm_microbench() {
+    use kurumi_core::Backend;
+    // SAFETY: set before any eval; single-threaded bench. Gates the GPU-time path in flush.
+    unsafe { std::env::set_var("KURUMI_GPUTIME", "1") };
+    let Some(be) = MetalBackend::new() else {
+        return;
+    };
+    eprintln!("Metal projection GEMM microbench -- {} (GPU-time)", be.name());
+    // (label, M, K, N): M = tokens (batch*seq), K/N = model dims.
+    let shapes = [
+        ("prefill out   768", 512usize, 768usize, 768usize),
+        ("prefill qkv   768", 512, 768, 2304),
+        ("prefill mlp-up 768", 512, 768, 3072),
+        ("prefill out  4096", 2048, 4096, 4096),
+        ("prefill mlp  4096", 2048, 4096, 11008),
+        ("decode  gemv 4096", 1, 4096, 4096),
+    ];
+    for dt in [kurumi_core::DType::F32, kurumi_core::DType::F16] {
+        eprintln!("  -- {dt:?} --");
+        for (label, m, k, n) in shapes {
+            let mut g = Graph::new();
+            let a0 = g.constant(vec![0.01f32; m * k], vec![m, k]);
+            let b0 = g.constant(vec![0.02f32; k * n], vec![k, n]);
+            let (a, b) = (g.cast(a0, dt), g.cast(b0, dt));
+            let c = g.dot_general(a, b, vec![1], vec![0], vec![], vec![]).unwrap();
+            let iters = 50;
+            let (gpu_ms, _wall) = gpu_measure(&be, &g, c, iters);
+            let flops = 2.0 * (m * k * n) as f64 * iters as f64;
+            eprintln!(
+                "  {label}  [{m:>4},{k:>5}]x[{k:>5},{n:>5}]  GPU {:>6.3} ms/it  {:>8.0} GFLOPS",
+                gpu_ms / iters as f64,
+                flops / (gpu_ms / 1e3) / 1e9
+            );
+        }
+    }
+}
+
 // GPU-time GEMM GFLOPS + elementwise bandwidth via command-buffer timestamps (KURUMI_GPUTIME);
 // GPU time excludes host upload/dispatch, so GFLOPS vs the chip f32 roofline signals whether the
 // MPS GEMM needs a steel port (near roofline -> skip). (was benches/device.rs)

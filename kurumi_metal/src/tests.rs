@@ -26,5 +26,6 @@ fn slice_storage(s: &Storage, len: usize) -> Storage {
 
 mod bench;
 mod device_ops;
+mod fuzz;
 mod matmul;
 mod model;

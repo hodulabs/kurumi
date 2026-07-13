@@ -16,8 +16,10 @@ use float8::{F8E4M3, F8E5M2};
 use half::{bf16, f16};
 use num_complex::Complex;
 
-/// Native element types. Reserved (quant track): F8E4M3 F8E5M2 F8E8M0 F4(MX)
-/// + Quant descriptor: those need the quantization subsystem, not just a tag.
+/// Native element types. F8E4M3/F8E5M2 are first-class on the CPU oracle (arithmetic and
+/// transcendentals via f32 upcast) and autograd, but have no Metal device path yet -- they
+/// fall back to CPU. F8E8M0 and F4 (MX) stay reserved for the quant track: those need the
+/// quantization subsystem, not just a tag.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DType {
     BOOL,
