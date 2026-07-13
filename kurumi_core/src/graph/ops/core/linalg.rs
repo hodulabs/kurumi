@@ -114,9 +114,12 @@ impl Graph {
         }
     }
 
-    /// Matrix exponential `exp(A)` of each batched square `[.., N, N]` via a truncated
-    /// Taylor series `sum A^k/k!`. No scaling-and-squaring (needs a runtime norm we don't
-    /// compute statically), so accuracy holds for moderate ||A||.
+    /// Matrix exponential `exp(A)` of each batched square `[.., N, N]` via fixed
+    /// scaling-and-squaring: `B = A / 2^s`, Taylor `exp(B) = sum B^k/k!`, then square `s`
+    /// times (`exp(A) = exp(B)^(2^s)`). `s` is a compile-time constant, not the
+    /// runtime-norm-adaptive choice (a data-dependent branch impossible in the static
+    /// graph): the accurate `||A||` range is fixed but far wider than plain Taylor, at the
+    /// cost of `s` extra bmms even when `A` is small. Differentiable (bmm/mul/add only).
     pub fn matrix_exp(&mut self, a: NodeId) -> Result<NodeId, Error> {
         let sh = self.shape(a);
         let r = sh.len();
@@ -124,14 +127,20 @@ impl Graph {
         if r < 2 || sh[r - 2] != n {
             return Err(Error::shape("matrix_exp", "expects [.., N, N]"));
         }
+        const S: u32 = 5; // exp(A/2^S) accurate for ||A/2^S|| ~< 1, i.e. ||A|| ~< 32
+        let sc = self.scalar(a, 1.0 / (1u32 << S) as f32);
+        let b = self.mul(a, sc)?; // B = A / 2^S
         let eye = self.eye_like(a, n)?;
         let mut acc = eye;
-        let mut term = eye; // A^0/0! = I
-        for k in 1..=18u32 {
-            let at = self.bmm(term, a)?;
-            let inv = self.scalar(at, 1.0 / k as f32);
-            term = self.mul(at, inv)?; // term*A/k
+        let mut term = eye; // B^0/0! = I
+        for k in 1..=12u32 {
+            let bt = self.bmm(term, b)?;
+            let inv = self.scalar(bt, 1.0 / k as f32);
+            term = self.mul(bt, inv)?; // term*B/k
             acc = self.add(acc, term)?;
+        }
+        for _ in 0..S {
+            acc = self.bmm(acc, acc)?; // exp(B)^(2^S) by repeated squaring
         }
         Ok(acc)
     }

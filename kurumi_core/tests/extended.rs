@@ -345,6 +345,68 @@ fn qr_vjp() {
     });
 }
 
+// wide QR VJP via finite differences (Q-path and R-path), wide A = [2,3] (M=2 < N=3).
+#[test]
+fn qr_vjp_wide() {
+    let base = vec![1.0f32, 2., 1., 0., 1., 2.];
+    let check = |loss: &dyn Fn(&mut Graph, kurumi_core::NodeId) -> kurumi_core::NodeId| {
+        let mut g = Graph::new();
+        let a = g.constant(base.clone(), vec![2, 3]);
+        let l = loss(&mut g, a);
+        let gn = grad(&mut g, l, &[a]).unwrap()[0];
+        let ana = interpret(&g, gn).f32().to_vec();
+        let eval = |data: &[f32]| -> f32 {
+            let mut g = Graph::new();
+            let a = g.constant(data.to_vec(), vec![2, 3]);
+            let l = loss(&mut g, a);
+            interpret(&g, l).f32().iter().sum()
+        };
+        let eps = 1e-3;
+        for i in 0..base.len() {
+            let mut lo = base.clone();
+            let mut hi = base.clone();
+            lo[i] -= eps;
+            hi[i] += eps;
+            let fd = (eval(&hi) - eval(&lo)) / (2.0 * eps);
+            assert!((ana[i] - fd).abs() < 2e-2, "wide qr grad {i}: {} vs fd {fd}", ana[i]);
+        }
+    };
+    // R-path: loss = sum R
+    check(&|g, a| {
+        let (_, r) = g.qr(a).unwrap();
+        let s = g.sum(r, 0).unwrap();
+        g.sum(s, 0).unwrap()
+    });
+    // Q-path: loss = sum Q
+    check(&|g, a| {
+        let (q, _) = g.qr(a).unwrap();
+        let s = g.sum(q, 0).unwrap();
+        g.sum(s, 0).unwrap()
+    });
+}
+
+// matrix_exp at a norm where 18-term Taylor is poor: diag(d) -> diag(exp d), d up to 10
+// (18-term Taylor of 10 has a ~7e-3 relative tail error; scaling-and-squaring stays tight).
+#[test]
+fn matrix_exp_large_norm() {
+    let d = [10.0f32, -8.0, 3.0];
+    let mut data = vec![0.0f32; 9];
+    for i in 0..3 {
+        data[i * 3 + i] = d[i];
+    }
+    let mut g = Graph::new();
+    let a = g.constant(data, vec![3, 3]);
+    let e = g.matrix_exp(a).unwrap();
+    let got = interpret(&g, e).f32().to_vec();
+    for i in 0..3 {
+        for j in 0..3 {
+            let want = if i == j { d[i].exp() } else { 0.0 };
+            let tol = 1e-3 * want.abs().max(1.0); // tight relative, abs floor for the zeros
+            assert!((got[i * 3 + j] - want).abs() < tol, "exp diag ({i},{j}): {} vs {want}", got[i * 3 + j]);
+        }
+    }
+}
+
 // general (nonsymmetric) eigenvalues via eigvals -> complex.
 #[test]
 fn eigvals_general() {

@@ -15,10 +15,47 @@ fn copyltu(g: &mut Graph, m: NodeId) -> Result<NodeId, Error> {
     g.add(lower, strict_t)
 }
 
-/// QR VJP for the tall/square case (`A = [.., M, N]`, `M >= N`, reduced `A = Q*R`).
-/// The backward is linear in `(Q_bar, R_bar)`, so the Q-node and R-node primitives each
-/// contribute their half (`acc` sums them): `A_bar = (Q_bar + Q*copyltu(M)) R^-T`, with
-/// `M = R_bar R^T` (R-node) or `M = -Q^T Q_bar` (Q-node). Wide `M<N` is forward-only (skipped).
+// Square/tall QR backward (`A1 = Q*R1`, square R1): A1_bar = (Q_bar + Q*copyltu(M)) R1^-T
+// with M = R1*R1_bar^T - Q_bar^T*Q. Either cotangent may be absent (treated as 0). Shared
+// by the tall/square path (one cotangent) and the wide path's A1 sub-problem (both present).
+fn square_qr_bwd(
+    g: &mut Graph,
+    q: NodeId,
+    r1: NodeId,
+    q_bar: Option<NodeId>,
+    r1_bar: Option<NodeId>,
+) -> Result<NodeId, Error> {
+    let mut m_mat: Option<NodeId> = None;
+    if let Some(rb) = r1_bar {
+        let rbart = transpose_last2(g, rb)?;
+        m_mat = Some(matmul_l2(g, r1, rbart)?); // R1*R1_bar^T
+    }
+    if let Some(qb) = q_bar {
+        let qbart = transpose_last2(g, qb)?;
+        let qtq = matmul_l2(g, qbart, q)?; // Q_bar^T*Q
+        let neg = g.neg(qtq);
+        m_mat = Some(match m_mat {
+            Some(a) => g.add(a, neg)?,
+            None => neg,
+        });
+    }
+    let m_mat = m_mat.ok_or_else(|| Error::shape("qr backward", "no cotangent"))?;
+    let cl = copyltu(g, m_mat)?;
+    let qcl = matmul_l2(g, q, cl)?; // Q copyltu(M)
+    let x = match q_bar {
+        Some(qb) => g.add(qb, qcl)?,
+        None => qcl,
+    };
+    let rinv = g.inv(r1)?;
+    let rinvt = transpose_last2(g, rinv)?;
+    matmul_l2(g, x, rinvt) // X R1^-T
+}
+
+/// QR VJP. Tall/square (`M >= N`, reduced `A = Q*R`): one cotangent flows to the shared
+/// `square_qr_bwd`. Wide (`M < N`): split A = [A1|A2], R = [R1|R2] at column M (R2 = Q^T A2).
+/// R-path R_bar = [R1_bar|R2_bar]: A2_bar = Q*R2_bar, effective Q_bar for A1 = A2*R2_bar^T,
+/// A1_bar = square_qr_bwd(Q, R1, A2*R2_bar^T, R1_bar). Q-path (R_bar=0): A2_bar = 0,
+/// A1_bar = square_qr_bwd(Q, R1, Q_bar, 0). A_bar = concat([A1_bar, A2_bar]).
 pub(crate) fn qr_vjp(
     g: &mut Graph,
     s: &[NodeId],
@@ -29,30 +66,37 @@ pub(crate) fn qr_vjp(
     let a = s[0];
     let ash = g.shape(a);
     let r = ash.len();
-    if ash[r - 2] < ash[r - 1] {
-        // wide QR (M < N) backward is unimplemented; error loudly rather than return a
-        // silently-zero gradient.
-        return Err(Error::shape("qr backward", "wide QR (M < N) is not differentiable"));
+    let (m, n) = (ash[r - 2], ash[r - 1]);
+    let (q, rr) = g.qr(a)?; // Q [.., M, K], R [.., K, N], K = min(M,N) (forward is cached)
+    if m >= n {
+        // tall/square: reduced A = Q*R, only one output has a nonzero cotangent.
+        let (qbar, rbar) = if r_factor { (None, Some(ct)) } else { (Some(ct), None) };
+        let ga = square_qr_bwd(g, q, rr, qbar, rbar)?;
+        return acc(g, cot, a, ga);
     }
-    let (q, rr) = g.qr(a)?; // Q [.., M, N], R [.., N, N] (recomputed; forward is cached)
-    // M = R*R_bar^T - Q_bar^T*Q ; split per output (the other cotangent is 0).
-    let (m_mat, qbar) = if r_factor {
-        let rbart = transpose_last2(g, ct)?; // R_bar^T
-        (matmul_l2(g, rr, rbart)?, None) // M = R*R_bar^T, Q_bar = 0
+    // wide (M < N): slice trailing axis [lo, hi).
+    let sl = |g: &mut Graph, x: NodeId, lo: usize, hi: usize| -> Result<NodeId, Error> {
+        let mut rg: Vec<(usize, usize)> = g.shape(x).iter().map(|&d| (0, d)).collect();
+        let rk = rg.len();
+        rg[rk - 1] = (lo, hi);
+        g.slice(x, rg)
+    };
+    let a2 = sl(g, a, m, n)?; // [.., M, N-M]
+    let r1 = sl(g, rr, 0, m)?; // [.., M, M] upper-tri
+    let (a1_bar, a2_bar) = if r_factor {
+        let r1_bar = sl(g, ct, 0, m)?;
+        let r2_bar = sl(g, ct, m, n)?; // [.., M, N-M]
+        let a2_bar = matmul_l2(g, q, r2_bar)?; // A2_bar = Q*R2_bar
+        let r2bart = transpose_last2(g, r2_bar)?;
+        let qbar = matmul_l2(g, a2, r2bart)?; // effective Q_bar = A2*R2_bar^T
+        let a1_bar = square_qr_bwd(g, q, r1, Some(qbar), Some(r1_bar))?;
+        (a1_bar, a2_bar)
     } else {
-        let qbart = transpose_last2(g, ct)?; // Q_bar^T
-        let qtq = matmul_l2(g, qbart, q)?; // Q_bar^T*Q
-        (g.neg(qtq), Some(ct)) // M = -Q_bar^T*Q
+        // R_bar = 0 => R2_bar = 0 => A2_bar = 0; A1 sub-problem sees only Q_bar = ct.
+        let a1_bar = square_qr_bwd(g, q, r1, Some(ct), None)?;
+        (a1_bar, g.zeros_like(a2))
     };
-    let cl = copyltu(g, m_mat)?;
-    let qcl = matmul_l2(g, q, cl)?; // Q copyltu(M)
-    let x = match qbar {
-        Some(qb) => g.add(qb, qcl)?,
-        None => qcl,
-    };
-    let rinv = g.inv(rr)?;
-    let rinvt = transpose_last2(g, rinv)?;
-    let ga = matmul_l2(g, x, rinvt)?; // X R^-T
+    let ga = g.concat(&[a1_bar, a2_bar], r - 1)?;
     acc(g, cot, a, ga)
 }
 
