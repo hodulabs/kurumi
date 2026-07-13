@@ -59,7 +59,7 @@ KuNode ku_constant_f32(KuGraph *g, const float *data, size_t len, const size_t *
 KuNode ku_constant(KuGraph *g, uint32_t dtype, const uint8_t *data, size_t nbytes, const size_t *shape, size_t rank);
 KuNode ku_scalar(KuGraph *g, KuNode like, float v);
 
-/* builder ops (return a node id; KU_ERR on error) */
+/* elementwise / two-operand builders (g, a, b) */
 KuNode ku_add(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_sub(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_mul(KuGraph *g, KuNode a, KuNode b);
@@ -67,42 +67,157 @@ KuNode ku_div(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_max(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_min(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_pow(KuGraph *g, KuNode a, KuNode b);
-/* arithmetic */
 KuNode ku_atan2(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_idiv(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_rem(KuGraph *g, KuNode a, KuNode b);
-/* bitwise (integer) */
 KuNode ku_and(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_or(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_xor(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_shl(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_shr(KuGraph *g, KuNode a, KuNode b);
-/* comparison (-> BOOL) */
 KuNode ku_lt(KuGraph *g, KuNode a, KuNode b);
+KuNode ku_eq(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_le(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_gt(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_ge(KuGraph *g, KuNode a, KuNode b);
-KuNode ku_eq(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_ne(KuGraph *g, KuNode a, KuNode b);
-/* misc two-operand */
 KuNode ku_logaddexp(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_xlogy(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_prelu(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_complex(KuGraph *g, KuNode a, KuNode b);
-KuNode ku_beta(KuGraph *g, KuNode a, KuNode b);
-KuNode ku_broadcast_like(KuGraph *g, KuNode a, KuNode b);
-/* linalg solves: a=A, b=rhs */
 KuNode ku_solve(KuGraph *g, KuNode a, KuNode b);
-KuNode ku_lstsq(KuGraph *g, KuNode a, KuNode b);
-/* nd gather: a=operand, b=indices */
 KuNode ku_gather_nd(KuGraph *g, KuNode a, KuNode b);
-/* losses: a=input/logits, b=target */
+KuNode ku_broadcast_like(KuGraph *g, KuNode a, KuNode b);
+KuNode ku_beta(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_mse_loss(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_l1_loss(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_hinge_loss(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_kl_div(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_bce_loss(KuGraph *g, KuNode a, KuNode b);
 KuNode ku_bce_with_logits(KuGraph *g, KuNode a, KuNode b);
+KuNode ku_lstsq(KuGraph *g, KuNode a, KuNode b);
+
+/* unary builders (g, x) */
+KuNode ku_neg(KuGraph *g, KuNode x);
+KuNode ku_recip(KuGraph *g, KuNode x);
+KuNode ku_sqrt(KuGraph *g, KuNode x);
+KuNode ku_square(KuGraph *g, KuNode x);
+KuNode ku_abs(KuGraph *g, KuNode x);
+KuNode ku_sign(KuGraph *g, KuNode x);
+KuNode ku_floor(KuGraph *g, KuNode x);
+KuNode ku_ceil(KuGraph *g, KuNode x);
+KuNode ku_round(KuGraph *g, KuNode x);
+KuNode ku_exp(KuGraph *g, KuNode x);
+KuNode ku_exp2(KuGraph *g, KuNode x);
+KuNode ku_exp10(KuGraph *g, KuNode x);
+KuNode ku_ln(KuGraph *g, KuNode x);
+KuNode ku_log2(KuGraph *g, KuNode x);
+KuNode ku_log10(KuGraph *g, KuNode x);
+KuNode ku_sin(KuGraph *g, KuNode x);
+KuNode ku_cos(KuGraph *g, KuNode x);
+KuNode ku_tan(KuGraph *g, KuNode x);
+KuNode ku_sinh(KuGraph *g, KuNode x);
+KuNode ku_cosh(KuGraph *g, KuNode x);
+KuNode ku_asin(KuGraph *g, KuNode x);
+KuNode ku_acos(KuGraph *g, KuNode x);
+KuNode ku_atan(KuGraph *g, KuNode x);
+KuNode ku_asinh(KuGraph *g, KuNode x);
+KuNode ku_acosh(KuGraph *g, KuNode x);
+KuNode ku_atanh(KuGraph *g, KuNode x);
+KuNode ku_relu(KuGraph *g, KuNode x);
+KuNode ku_gelu(KuGraph *g, KuNode x);
+KuNode ku_gelu_erf(KuGraph *g, KuNode x);
+KuNode ku_silu(KuGraph *g, KuNode x);
+KuNode ku_sigmoid(KuGraph *g, KuNode x);
+KuNode ku_tanh(KuGraph *g, KuNode x);
+KuNode ku_softplus(KuGraph *g, KuNode x);
+KuNode ku_softsign(KuGraph *g, KuNode x);
+KuNode ku_mish(KuGraph *g, KuNode x);
+KuNode ku_selu(KuGraph *g, KuNode x);
+KuNode ku_hardsigmoid(KuGraph *g, KuNode x);
+KuNode ku_hardswish(KuGraph *g, KuNode x);
+KuNode ku_erf(KuGraph *g, KuNode x);
+KuNode ku_erfc(KuGraph *g, KuNode x);
+KuNode ku_erfinv(KuGraph *g, KuNode x);
+KuNode ku_gamma(KuGraph *g, KuNode x);
+KuNode ku_lgamma(KuGraph *g, KuNode x);
+KuNode ku_digamma(KuGraph *g, KuNode x);
+KuNode ku_i0(KuGraph *g, KuNode x);
+KuNode ku_logical_not(KuGraph *g, KuNode x);
+KuNode ku_ones_like(KuGraph *g, KuNode x);
+KuNode ku_zeros_like(KuGraph *g, KuNode x);
+
+/* unary builders (g, x) that validate or decompose to a fallible chain */
+KuNode ku_expm1(KuGraph *g, KuNode x);
+KuNode ku_log1p(KuGraph *g, KuNode x);
+KuNode ku_logit(KuGraph *g, KuNode x);
+KuNode ku_log_sigmoid(KuGraph *g, KuNode x);
+KuNode ku_sinc(KuGraph *g, KuNode x);
+KuNode ku_isnan(KuGraph *g, KuNode x);
+KuNode ku_isinf(KuGraph *g, KuNode x);
+KuNode ku_isfinite(KuGraph *g, KuNode x);
+KuNode ku_bitwise_not(KuGraph *g, KuNode x);
+KuNode ku_flatten(KuGraph *g, KuNode x);
+KuNode ku_t(KuGraph *g, KuNode x);
+KuNode ku_trace(KuGraph *g, KuNode x);
+KuNode ku_diagonal(KuGraph *g, KuNode x);
+KuNode ku_diag_embed(KuGraph *g, KuNode x);
+KuNode ku_sum_all(KuGraph *g, KuNode x);
+KuNode ku_prod_all(KuGraph *g, KuNode x);
+KuNode ku_mean_all(KuGraph *g, KuNode x);
+KuNode ku_cov(KuGraph *g, KuNode x);
+KuNode ku_corrcoef(KuGraph *g, KuNode x);
+KuNode ku_real(KuGraph *g, KuNode x);
+KuNode ku_imag(KuGraph *g, KuNode x);
+KuNode ku_conj(KuGraph *g, KuNode x);
+KuNode ku_cabs(KuGraph *g, KuNode x);
+KuNode ku_angle(KuGraph *g, KuNode x);
+KuNode ku_det(KuGraph *g, KuNode x);
+KuNode ku_cholesky(KuGraph *g, KuNode x);
+KuNode ku_inv(KuGraph *g, KuNode x);
+KuNode ku_pinv(KuGraph *g, KuNode x);
+KuNode ku_eigvals(KuGraph *g, KuNode x);
+KuNode ku_matrix_exp(KuGraph *g, KuNode x);
+KuNode ku_fft2(KuGraph *g, KuNode x);
+KuNode ku_ifft2(KuGraph *g, KuNode x);
+KuNode ku_rope(KuGraph *g, KuNode x);
+
+/* reductions / cumulative scans over one axis (g, x, axis) */
+KuNode ku_sum(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_prod(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_mean(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_reduce_max(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_reduce_min(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_all(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_any(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_argmax(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_argmin(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_median(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_mode(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_std(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_var(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_softmax(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_log_softmax(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_logsumexp(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_logsum(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_l1_norm(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_l2_norm(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_cumsum(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_cumprod(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_cummax(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_cummin(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_squeeze(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_unsqueeze(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_fft(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_ifft(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_rfft(KuGraph *g, KuNode x, size_t axis);
+KuNode ku_hilbert(KuGraph *g, KuNode x, size_t axis);
+
+/* unary with one f32 attr (g, x, v) */
+KuNode ku_clamp_min(KuGraph *g, KuNode x, float v);
+KuNode ku_clamp_max(KuGraph *g, KuNode x, float v);
+
+/* matrix contraction */
 KuNode ku_matmul(KuGraph *g, KuNode a, KuNode b);
 /* General contraction: contract lc/rc axes, batch lb/rb axes (StableHLO dot_general). */
 KuNode ku_dot_general(KuGraph *g, KuNode a, KuNode b, const size_t *lc, size_t nlc, const size_t *rc, size_t nrc,
@@ -117,187 +232,20 @@ KuNode ku_quant_matmul(KuGraph *g, KuNode act, KuNode qweight, KuNode scales, Ku
  * (same count, or NULL when symmetric != 0). bits is 2, 4, or 8. */
 void ku_quantize(const float *w, size_t rows, size_t cols, uint8_t bits, size_t group_size, uint32_t symmetric,
                  uint8_t *out_packed, uint16_t *out_scales, uint16_t *out_mins);
+KuNode ku_einsum(KuGraph *g, const char *equation, const KuNode *operands, size_t n);
 
-KuNode ku_neg(KuGraph *g, KuNode x);
-KuNode ku_recip(KuGraph *g, KuNode x);
-KuNode ku_sqrt(KuGraph *g, KuNode x);
-KuNode ku_exp(KuGraph *g, KuNode x);
-KuNode ku_relu(KuGraph *g, KuNode x);
-KuNode ku_gelu(KuGraph *g, KuNode x);
-KuNode ku_sigmoid(KuGraph *g, KuNode x);
-KuNode ku_tanh(KuGraph *g, KuNode x);
-KuNode ku_silu(KuGraph *g, KuNode x);
-/* arithmetic / rounding */
-KuNode ku_square(KuGraph *g, KuNode x);
-KuNode ku_abs(KuGraph *g, KuNode x);
-KuNode ku_sign(KuGraph *g, KuNode x);
-KuNode ku_floor(KuGraph *g, KuNode x);
-KuNode ku_ceil(KuGraph *g, KuNode x);
-KuNode ku_round(KuGraph *g, KuNode x);
-/* exp / log */
-KuNode ku_exp2(KuGraph *g, KuNode x);
-KuNode ku_exp10(KuGraph *g, KuNode x);
-KuNode ku_ln(KuGraph *g, KuNode x);
-KuNode ku_log2(KuGraph *g, KuNode x);
-KuNode ku_log10(KuGraph *g, KuNode x);
-KuNode ku_expm1(KuGraph *g, KuNode x);
-KuNode ku_log1p(KuGraph *g, KuNode x);
-/* trigonometric / hyperbolic */
-KuNode ku_sin(KuGraph *g, KuNode x);
-KuNode ku_cos(KuGraph *g, KuNode x);
-KuNode ku_tan(KuGraph *g, KuNode x);
-KuNode ku_sinh(KuGraph *g, KuNode x);
-KuNode ku_cosh(KuGraph *g, KuNode x);
-KuNode ku_asin(KuGraph *g, KuNode x);
-KuNode ku_acos(KuGraph *g, KuNode x);
-KuNode ku_atan(KuGraph *g, KuNode x);
-KuNode ku_asinh(KuGraph *g, KuNode x);
-KuNode ku_acosh(KuGraph *g, KuNode x);
-KuNode ku_atanh(KuGraph *g, KuNode x);
-KuNode ku_sinc(KuGraph *g, KuNode x);
-/* activations */
-KuNode ku_gelu_erf(KuGraph *g, KuNode x);
-KuNode ku_softplus(KuGraph *g, KuNode x);
-KuNode ku_softsign(KuGraph *g, KuNode x);
-KuNode ku_mish(KuGraph *g, KuNode x);
-KuNode ku_selu(KuGraph *g, KuNode x);
-KuNode ku_hardsigmoid(KuGraph *g, KuNode x);
-KuNode ku_hardswish(KuGraph *g, KuNode x);
-KuNode ku_logit(KuGraph *g, KuNode x);
-KuNode ku_log_sigmoid(KuGraph *g, KuNode x);
-/* special functions */
-KuNode ku_erf(KuGraph *g, KuNode x);
-KuNode ku_erfc(KuGraph *g, KuNode x);
-KuNode ku_erfinv(KuGraph *g, KuNode x);
-KuNode ku_gamma(KuGraph *g, KuNode x);
-KuNode ku_lgamma(KuGraph *g, KuNode x);
-KuNode ku_digamma(KuGraph *g, KuNode x);
-KuNode ku_i0(KuGraph *g, KuNode x);
-/* predicates / logical (-> BOOL) */
-KuNode ku_logical_not(KuGraph *g, KuNode x);
-KuNode ku_bitwise_not(KuGraph *g, KuNode x);
-KuNode ku_isnan(KuGraph *g, KuNode x);
-KuNode ku_isinf(KuGraph *g, KuNode x);
-KuNode ku_isfinite(KuGraph *g, KuNode x);
-/* same-shape fills */
-KuNode ku_ones_like(KuGraph *g, KuNode x);
-KuNode ku_zeros_like(KuGraph *g, KuNode x);
-/* complex parts */
-KuNode ku_real(KuGraph *g, KuNode x);
-KuNode ku_imag(KuGraph *g, KuNode x);
-KuNode ku_conj(KuGraph *g, KuNode x);
-KuNode ku_cabs(KuGraph *g, KuNode x);
-KuNode ku_angle(KuGraph *g, KuNode x);
-/* linalg (whole-tensor) */
-KuNode ku_t(KuGraph *g, KuNode x);
-KuNode ku_flatten(KuGraph *g, KuNode x);
-KuNode ku_trace(KuGraph *g, KuNode x);
-KuNode ku_diagonal(KuGraph *g, KuNode x);
-KuNode ku_diag_embed(KuGraph *g, KuNode x);
-KuNode ku_det(KuGraph *g, KuNode x);
-KuNode ku_cholesky(KuGraph *g, KuNode x);
-KuNode ku_inv(KuGraph *g, KuNode x);
-KuNode ku_pinv(KuGraph *g, KuNode x);
-KuNode ku_eigvals(KuGraph *g, KuNode x);
-KuNode ku_matrix_exp(KuGraph *g, KuNode x);
-/* reduce-all (over every axis) */
-KuNode ku_sum_all(KuGraph *g, KuNode x);
-KuNode ku_prod_all(KuGraph *g, KuNode x);
-KuNode ku_mean_all(KuGraph *g, KuNode x);
-KuNode ku_cov(KuGraph *g, KuNode x);
-KuNode ku_corrcoef(KuGraph *g, KuNode x);
-/* whole-tensor fft + rope */
-KuNode ku_fft2(KuGraph *g, KuNode x);
-KuNode ku_ifft2(KuGraph *g, KuNode x);
-KuNode ku_rope(KuGraph *g, KuNode x);
+/* pairwise distances */
+KuNode ku_cdist(KuGraph *g, KuNode a, KuNode b, float p);
+KuNode ku_pdist(KuGraph *g, KuNode a, float p);
+KuNode ku_cosine_similarity(KuGraph *g, KuNode a, KuNode b, size_t axis);
 
-KuNode ku_sum(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_mean(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_reduce_max(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_softmax(KuGraph *g, KuNode x, size_t axis);
-/* reductions over one axis (keepdim = false) */
-KuNode ku_prod(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_reduce_min(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_all(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_any(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_argmax(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_argmin(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_median(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_mode(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_std(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_var(KuGraph *g, KuNode x, size_t axis);
-/* softmax family / norms over one axis */
-KuNode ku_log_softmax(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_logsumexp(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_logsum(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_l1_norm(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_l2_norm(KuGraph *g, KuNode x, size_t axis);
-/* cumulative scans over one axis */
-KuNode ku_cumsum(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_cumprod(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_cummax(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_cummin(KuGraph *g, KuNode x, size_t axis);
-/* squeeze / unsqueeze one axis */
-KuNode ku_squeeze(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_unsqueeze(KuGraph *g, KuNode x, size_t axis);
-/* 1-D fft over one axis */
-KuNode ku_fft(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_ifft(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_rfft(KuGraph *g, KuNode x, size_t axis);
-KuNode ku_hilbert(KuGraph *g, KuNode x, size_t axis);
-
-/* movement (shapes given as row-major dim/axis lists) */
-KuNode ku_reshape(KuGraph *g, KuNode x, const size_t *shape, size_t rank);
-KuNode ku_expand(KuGraph *g, KuNode x, const size_t *shape, size_t rank);
-KuNode ku_permute(KuGraph *g, KuNode x, const size_t *perm, size_t rank);
-KuNode ku_transpose(KuGraph *g, KuNode x, size_t i, size_t j);
-KuNode ku_flip(KuGraph *g, KuNode x, const size_t *axes, size_t n);
-KuNode ku_slice(KuGraph *g, KuNode x, const size_t *ranges, size_t rank); /* 2*rank (start,end) */
-KuNode ku_pad(KuGraph *g, KuNode x, const size_t *pads, size_t rank);     /* 2*rank (lo,hi), 0 */
-/* non-zero padding: mode 0=reflect, 1=replicate, 2=circular */
-KuNode ku_pad_mode(KuGraph *g, KuNode x, const size_t *pads, size_t rank, uint32_t mode); /* 2*rank (lo,hi) */
-KuNode ku_concat(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
-KuNode ku_stack(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
-/* split x into n pieces of `sizes` along axis; piece ids -> out[0..n]. 0 ok / KU_ERR. */
-KuNode ku_split(KuGraph *g, KuNode x, const size_t *sizes, size_t n, size_t axis, KuNode *out);
-
-/* indexing */
+/* indexing / scatter / masking. sort/argsort take a descending flag; masked_select/compress/nonzero/unique take an
+ * upper-bound k (the static output length); scatter combine: 0=set, 1=add, 2=max, 3=min */
 KuNode ku_where(KuGraph *g, KuNode cond, KuNode a, KuNode b); /* cond ? a : b */
 KuNode ku_gather(KuGraph *g, KuNode x, KuNode idx, size_t axis);
 KuNode ku_gather_along(KuGraph *g, KuNode x, KuNode idx, size_t axis);
 KuNode ku_take_along_dim(KuGraph *g, KuNode x, KuNode idx, size_t axis);
 KuNode ku_onehot(KuGraph *g, KuNode idx, size_t num_classes);
-
-/* activations with an attr / nn (norm, pool) */
-KuNode ku_leaky_relu(KuGraph *g, KuNode x, float slope);
-KuNode ku_elu(KuGraph *g, KuNode x, float alpha);
-KuNode ku_clamp(KuGraph *g, KuNode x, float lo, float hi);
-KuNode ku_clamp_min(KuGraph *g, KuNode x, float v);
-KuNode ku_clamp_max(KuGraph *g, KuNode x, float v);
-KuNode ku_layernorm(KuGraph *g, KuNode x, size_t axis, float eps);
-KuNode ku_rmsnorm(KuGraph *g, KuNode x, size_t axis, float eps);
-KuNode ku_group_norm(KuGraph *g, KuNode x, size_t groups, float eps);
-KuNode ku_cross_entropy(KuGraph *g, KuNode logits, KuNode targets, size_t axis);
-KuNode ku_sdpa(KuGraph *g, KuNode q, KuNode k, KuNode v, uint32_t causal);
-
-/* generators / cast / rng (seed-based, reproducible) */
-KuNode ku_iota(KuGraph *g, const size_t *shape, size_t rank, size_t axis, uint32_t dtype);
-KuNode ku_cast(KuGraph *g, KuNode x, uint32_t dtype);
-KuNode ku_rand_uniform(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed);
-KuNode ku_randn(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed);
-KuNode ku_dropout(KuGraph *g, KuNode x, float p, uint64_t seed);
-
-/* multi-output factorizations: factor ids -> out[]; return 0 ok / KU_ERR.
- * slogdet->[sign,logabsdet], eigh->[vals,vecs], qr->[Q,R], svd->[U,S,V], topk->[vals,idx]. */
-KuNode ku_slogdet(KuGraph *g, KuNode x, KuNode *out);
-KuNode ku_eigh(KuGraph *g, KuNode x, KuNode *out);
-KuNode ku_qr(KuGraph *g, KuNode x, KuNode *out);
-KuNode ku_svd(KuGraph *g, KuNode x, KuNode *out);
-KuNode ku_topk(KuGraph *g, KuNode x, size_t k, size_t axis, uint32_t largest, KuNode *out);
-
-/* sort / scatter / masking / dynamic-shape indexing. sort/argsort take a descending flag;
- * masked_select/compress/nonzero/unique take an upper-bound k (the static output length).
- * scatter combine: 0=set, 1=add, 2=max, 3=min. */
 KuNode ku_sort(KuGraph *g, KuNode x, size_t axis, uint32_t descending);
 KuNode ku_argsort(KuGraph *g, KuNode x, size_t axis, uint32_t descending);
 KuNode ku_scatter(KuGraph *g, KuNode operand, KuNode indices, KuNode updates, size_t axis, uint32_t combine);
@@ -309,17 +257,58 @@ KuNode ku_compress(KuGraph *g, KuNode mask, KuNode x, size_t k);
 KuNode ku_nonzero(KuGraph *g, KuNode x, size_t k);
 KuNode ku_unique(KuGraph *g, KuNode x, size_t k);
 
-/* movement / shape */
+/* multi-output factorizations: factor ids -> out[]; return 0 ok / KU_ERR. slogdet->[sign,logabsdet], eigh->[vals,vecs],
+ * qr->[Q,R], svd->[U,S,V], topk->[vals,idx] */
+KuNode ku_slogdet(KuGraph *g, KuNode x, KuNode *out);
+KuNode ku_eigh(KuGraph *g, KuNode x, KuNode *out);
+KuNode ku_qr(KuGraph *g, KuNode x, KuNode *out);
+KuNode ku_svd(KuGraph *g, KuNode x, KuNode *out);
+KuNode ku_topk(KuGraph *g, KuNode x, size_t k, size_t axis, uint32_t largest, KuNode *out);
+
+/* movement / shape (row-major dim/axis lists) */
+KuNode ku_reshape(KuGraph *g, KuNode x, const size_t *shape, size_t rank);
+KuNode ku_expand(KuGraph *g, KuNode x, const size_t *shape, size_t rank);
+KuNode ku_permute(KuGraph *g, KuNode x, const size_t *perm, size_t rank);
+KuNode ku_transpose(KuGraph *g, KuNode x, size_t i, size_t j);
+KuNode ku_flip(KuGraph *g, KuNode x, const size_t *axes, size_t n);
+KuNode ku_slice(KuGraph *g, KuNode x, const size_t *ranges, size_t rank);      /* 2*rank (start,end) */
+KuNode ku_slice_step(KuGraph *g, KuNode x, const size_t *ranges, size_t rank); /* 3*rank (start,end,step) */
+KuNode ku_pad(KuGraph *g, KuNode x, const size_t *pads, size_t rank);          /* 2*rank (lo,hi), 0 */
+/* non-zero padding: mode 0=reflect, 1=replicate, 2=circular */
+KuNode ku_pad_mode(KuGraph *g, KuNode x, const size_t *pads, size_t rank, uint32_t mode); /* 2*rank (lo,hi) */
+KuNode ku_concat(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
+KuNode ku_stack(KuGraph *g, const KuNode *parts, size_t n, size_t axis);
+/* split x into n pieces of `sizes` along axis; piece ids -> out[0..n]. 0 ok / KU_ERR. */
+KuNode ku_split(KuGraph *g, KuNode x, const size_t *sizes, size_t n, size_t axis, KuNode *out);
 KuNode ku_tile(KuGraph *g, KuNode x, size_t axis, size_t n);
 KuNode ku_repeat_interleave(KuGraph *g, KuNode x, size_t axis, size_t n);
 KuNode ku_roll(KuGraph *g, KuNode x, size_t shift, size_t axis);
 KuNode ku_broadcast_to(KuGraph *g, KuNode x, const size_t *shape, size_t rank);
-KuNode ku_slice_step(KuGraph *g, KuNode x, const size_t *ranges, size_t rank); /* 3*rank (start,end,step) */
 KuNode ku_tril(KuGraph *g, KuNode x, int64_t diagonal);
 KuNode ku_triu(KuGraph *g, KuNode x, int64_t diagonal);
 KuNode ku_detach(KuGraph *g, KuNode x);
+KuNode ku_iota(KuGraph *g, const size_t *shape, size_t rank, size_t axis, uint32_t dtype);
+KuNode ku_cast(KuGraph *g, KuNode x, uint32_t dtype);
 KuNode ku_bitcast(KuGraph *g, KuNode x, uint32_t dtype);
-KuNode ku_einsum(KuGraph *g, const char *equation, const KuNode *operands, size_t n);
+
+/* activations with an attr */
+KuNode ku_leaky_relu(KuGraph *g, KuNode x, float slope);
+KuNode ku_elu(KuGraph *g, KuNode x, float alpha);
+KuNode ku_celu(KuGraph *g, KuNode x, float alpha);
+KuNode ku_clamp(KuGraph *g, KuNode x, float lo, float hi);
+
+/* normalizations */
+KuNode ku_layernorm(KuGraph *g, KuNode x, size_t axis, float eps);
+KuNode ku_rmsnorm(KuGraph *g, KuNode x, size_t axis, float eps);
+KuNode ku_group_norm(KuGraph *g, KuNode x, size_t groups, float eps);
+KuNode ku_instance_norm(KuGraph *g, KuNode x, float eps);
+KuNode ku_lrn(KuGraph *g, KuNode x, size_t size, float alpha, float beta, float k);
+KuNode ku_norm_p(KuGraph *g, KuNode x, float p, size_t axis);
+
+/* losses over one axis */
+KuNode ku_cross_entropy(KuGraph *g, KuNode logits, KuNode targets, size_t axis);
+KuNode ku_nll_loss(KuGraph *g, KuNode log_probs, KuNode target, size_t axis);
+KuNode ku_huber_loss(KuGraph *g, KuNode pred, KuNode target, float delta);
 
 /* convolution (stride/padding/dilation per spatial dim; transpose adds output_padding) */
 KuNode ku_conv1d(KuGraph *g, KuNode input, KuNode weight, size_t stride, size_t padding, size_t dilation);
@@ -334,7 +323,7 @@ KuNode ku_conv_transpose2d(KuGraph *g, KuNode input, KuNode weight, size_t sh, s
 KuNode ku_conv_transpose3d(KuGraph *g, KuNode input, KuNode weight, size_t sd, size_t sh, size_t sw, size_t pd,
                            size_t ph, size_t pw, size_t opd, size_t oph, size_t opw, size_t dd, size_t dh, size_t dw);
 
-/* pooling (no padding); k/s per spatial dim. reduce_window mode = "max"|"sum"|"avg". */
+/* pooling (no padding); k/s per spatial dim. reduce_window mode = "max"|"sum"|"avg" */
 KuNode ku_max_pool1d(KuGraph *g, KuNode x, size_t k, size_t s);
 KuNode ku_avg_pool1d(KuGraph *g, KuNode x, size_t k, size_t s);
 KuNode ku_min_pool1d(KuGraph *g, KuNode x, size_t k, size_t s);
@@ -350,6 +339,18 @@ KuNode ku_sum_pool3d(KuGraph *g, KuNode x, size_t kd, size_t kh, size_t kw, size
 KuNode ku_reduce_window(KuGraph *g, KuNode x, const size_t *window, size_t nw, const size_t *stride, size_t ns,
                         const size_t *dilation, size_t nd, const char *mode);
 
+/* scaled dot-product attention */
+KuNode ku_sdpa(KuGraph *g, KuNode q, KuNode k, KuNode v, uint32_t causal);
+
+/* rng (seed-based, reproducible; rand_uniform_keyed keys off a runtime scalar-int node) */
+KuNode ku_rand_uniform(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed);
+KuNode ku_randn(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed);
+KuNode ku_dropout(KuGraph *g, KuNode x, float p, uint64_t seed);
+KuNode ku_randint(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, int64_t lo, int64_t hi);
+KuNode ku_rand_range(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, float lo, float hi);
+KuNode ku_bernoulli(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, float p);
+KuNode ku_rand_uniform_keyed(KuGraph *g, const size_t *shape, size_t rank, KuNode seed);
+
 /* fft / signal (pass window = KU_ERR for none) */
 KuNode ku_fftn(KuGraph *g, KuNode x, const size_t *axes, size_t n);
 KuNode ku_ifftn(KuGraph *g, KuNode x, const size_t *axes, size_t n);
@@ -362,26 +363,6 @@ KuNode ku_hamming_window(KuGraph *g, size_t n);
 KuNode ku_blackman_window(KuGraph *g, size_t n);
 KuNode ku_bartlett_window(KuGraph *g, size_t n);
 
-/* rng (seed-based; rand_uniform_keyed keys off a runtime scalar-int node) */
-KuNode ku_randint(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, int64_t lo, int64_t hi);
-KuNode ku_rand_range(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, float lo, float hi);
-KuNode ku_bernoulli(KuGraph *g, const size_t *shape, size_t rank, uint64_t seed, float p);
-KuNode ku_rand_uniform_keyed(KuGraph *g, const size_t *shape, size_t rank, KuNode seed);
-
-/* extra norms / losses / stats */
-KuNode ku_instance_norm(KuGraph *g, KuNode x, float eps);
-KuNode ku_lrn(KuGraph *g, KuNode x, size_t size, float alpha, float beta, float k);
-KuNode ku_norm_p(KuGraph *g, KuNode x, float p, size_t axis);
-KuNode ku_nll_loss(KuGraph *g, KuNode log_probs, KuNode target, size_t axis);
-KuNode ku_huber_loss(KuGraph *g, KuNode pred, KuNode target, float delta);
-KuNode ku_celu(KuGraph *g, KuNode x, float alpha);
-KuNode ku_quantile(KuGraph *g, KuNode x, size_t axis, float q);
-KuNode ku_std_correction(KuGraph *g, KuNode x, size_t axis, size_t correction);
-KuNode ku_var_correction(KuGraph *g, KuNode x, size_t axis, size_t correction);
-KuNode ku_cdist(KuGraph *g, KuNode a, KuNode b, float p);
-KuNode ku_pdist(KuGraph *g, KuNode a, float p);
-KuNode ku_cosine_similarity(KuGraph *g, KuNode a, KuNode b, size_t axis);
-
 /* spatial resize */
 KuNode ku_resize(KuGraph *g, KuNode x, const size_t *axes, size_t na, const size_t *sizes, size_t ns,
                  const char *interp, const char *coord);
@@ -390,6 +371,11 @@ KuNode ku_resize_bicubic(KuGraph *g, KuNode x, size_t out_h, size_t out_w);
 KuNode ku_upsample_nearest2d(KuGraph *g, KuNode x, size_t factor);
 KuNode ku_space_to_depth(KuGraph *g, KuNode x, size_t r);
 KuNode ku_depth_to_space(KuGraph *g, KuNode x, size_t r);
+
+/* statistics */
+KuNode ku_quantile(KuGraph *g, KuNode x, size_t axis, float q);
+KuNode ku_std_correction(KuGraph *g, KuNode x, size_t axis, size_t correction);
+KuNode ku_var_correction(KuGraph *g, KuNode x, size_t axis, size_t correction);
 
 /* backend + eval */
 KuBackend *ku_backend_new(uint32_t kind); /* NULL if unavailable */
