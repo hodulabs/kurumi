@@ -42,7 +42,7 @@ pub fn amp(g: &mut Graph, root: NodeId) -> NodeId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Graph, interpret};
+    use crate::{Graph, grad, interpret};
 
     #[test]
     fn amp_runs_matmul_in_f16_and_matches_within_tol() {
@@ -64,5 +64,39 @@ mod tests {
             .iter()
             .any(|&n| matches!(g.node(n).op, Op::DotGeneral { .. }) && g.dtype(n) == DType::F16);
         assert!(has_f16_matmul, "amp did not lower the matmul to f16");
+    }
+
+    #[test]
+    fn amp_then_grad_is_finite_and_matches_f32() {
+        // amp runs before grad, so lowering the forward matmuls to f16 also makes the
+        // backward matmuls f16. build a training-shaped graph (two matmul+gelu layers into
+        // a scalar loss = sum of the last matmul) and check the param grads of the amped
+        // graph are finite and close to the f32 grads within f16 tolerance.
+        let mut g = Graph::new();
+        let x = g.constant((0..24).map(|i| (i as f32 * 0.1).sin() * 0.5).collect(), vec![4, 6]);
+        let w1 = g.constant((0..30).map(|i| (i as f32 * 0.2).cos() * 0.3).collect(), vec![6, 5]);
+        let w2 = g.constant((0..5).map(|i| (i as f32 * 0.3).sin() * 0.4).collect(), vec![5, 1]);
+        let params = [w1, w2];
+
+        let h = g.dot_general(x, w1, vec![1], vec![0], vec![], vec![]).unwrap();
+        let a = g.gelu(h);
+        let loss = g.dot_general(a, w2, vec![1], vec![0], vec![], vec![]).unwrap(); // [4,1]; grad sums it
+
+        // baseline grads with the graph left in f32.
+        let base: Vec<Vec<f32>> =
+            grad(&mut g, loss, &params).unwrap().iter().map(|&gn| interpret(&g, gn).f32().to_vec()).collect();
+
+        // amp the forward loss, then differentiate the amped (f16-matmul) graph.
+        let amped = amp(&mut g, loss);
+        let got: Vec<Vec<f32>> =
+            grad(&mut g, amped, &params).unwrap().iter().map(|&gn| interpret(&g, gn).f32().to_vec()).collect();
+
+        for (p, (b, a)) in base.iter().zip(&got).enumerate() {
+            for (j, (bv, av)) in b.iter().zip(a).enumerate() {
+                assert!(av.is_finite(), "param{p}[{j}] grad not finite: {av}");
+                let tol = 3e-3 + 2e-2 * bv.abs();
+                assert!((av - bv).abs() <= tol, "param{p}[{j}] amp grad {av} vs f32 {bv}");
+            }
+        }
     }
 }
