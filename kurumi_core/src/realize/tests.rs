@@ -1,3 +1,4 @@
+use crate::realize::expr::Repr;
 use crate::realize::*;
 use crate::{DType, Feeds, Graph, Storage, TensorVal, interpret, interpret_with};
 
